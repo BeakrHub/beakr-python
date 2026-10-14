@@ -191,6 +191,12 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("POST /v1/projects/{}/members", lambda c: c.projects.add_member("p1", "u1")),
     ("DELETE /v1/projects/{}/members/{}/{}", lambda c: c.projects.remove_member("p1", "u1")),
     ("GET /v1/projects/{}/pending-invitations", lambda c: c.projects.pending_invitations("p1")),
+    ("GET /v1/projects/{}/knowledge-summary", lambda c: c.projects.knowledge_status("p1")),
+    (
+        "GET /v1/projects/{}/knowledge/failed-files",
+        lambda c: c.projects.knowledge_failures("p1"),
+    ),
+    ("POST /v1/projects/{}/knowledge/retry-failed", lambda c: c.projects.retry_failed("p1")),
     (
         "DELETE /v1/projects/{}/pending-invitations/{}",
         lambda c: c.projects.revoke_invitation("p1", "i1"),

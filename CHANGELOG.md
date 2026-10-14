@@ -7,6 +7,32 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- **Know when a project's Knowledge is ready.**
+  `GET /v1/projects/{project_id}/knowledge-summary` (`projects:read`) is now
+  documented, under Projects. Alongside its coverage counts it reports `queued` and `running`
+  files (together `syncing`) and `failed` files (part of `eligible`), `ready`
+  (true when nothing is queued or running), and the most
+  recently failed files in `failed_files` (`failed_limit`, default 20), each with
+  `artifact_id`, `filename`, `path`, a public `error_code`
+  (`processing_failed`, `timed_out`, `concurrent_update` or `compile_failed`),
+  a `reason` safe to show a person, `failed_at` and `retryable`. A project the
+  caller cannot read now answers `404 not_found`, the same as one that does not
+  exist (it answered `403` before).
+- `GET /v1/projects/{project_id}/knowledge/failed-files` (`projects:read`) pages
+  through every failed file, newest first; `failed_files_next_cursor` from the
+  summary is its first `cursor`.
+- `POST /v1/projects/{project_id}/knowledge/retry-failed` (`uploads:write`)
+  sends the project's failed files, or the `artifact_ids` named, to Knowledge
+  again, up to 500 per call, and reports each file's `outcome` (`queued`,
+  `already_queued`, `not_failed`, `not_found` or `skipped`). Repeating it is
+  safe: files already queued or running are left alone. It needs permission to
+  add files to the project (`403 forbidden` otherwise) and is limited to 10
+  requests per minute.
+- `GET /v1/projects` takes `include_knowledge=true` to add each project's
+  `knowledge` (`queued`, `running`, `failed`, `ready`).
+- `GET /v1/bulk/{batch_id}/status` adds each file's `knowledge_status` and a
+  `knowledge` breakdown for the batch (`queued`, `running`, `created`, `failed`,
+  `skipped`, `other`, `not_requested`, `ready`).
 - `POST /v1/knowledge/documents` searches (`grep`), reads line windows (`read`),
   and lists (`ls`) original indexed files. It requires `projects:read`; a
   project-restricted credential must supply one of its authorized projects.
@@ -676,6 +702,17 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Client changes
 
+- **Know when Knowledge is ready.** `projects.knowledge_status(project_id)`
+  reads the project's Knowledge status (`ready`, `queued`, `running`, `failed`
+  and the newest `failed_files` with their `error_code` and `reason`);
+  `projects.wait_until_ready(project_id, timeout=..., poll=...)` polls it until
+  nothing is queued or running and returns it (`on_status` sees each read),
+  raising `KnowledgeTimeout`, or `KnowledgeFailed` with `raise_on_failure=True`;
+  `projects.knowledge_failures(project_id)` lists every failed file; and
+  `projects.retry_failed(project_id, artifact_ids=None)` sends failed files to
+  Knowledge again. `files.upload_many(..., wait="knowledge")` waits for the
+  batch's indexing and then for its files' Knowledge, and adds the final batch
+  status as `batch`.
 - **First release as its own package.** The Python SDK (`import beakr_sdk`) was
   developed inside `beakr-cli` and is now the `beakr-sdk` distribution, released
   from this repository. `beakr-cli` depends on it.
