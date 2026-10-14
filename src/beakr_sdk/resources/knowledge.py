@@ -298,18 +298,24 @@ class Knowledge(Resource[M]):
         )
 
     @returns(ops.build_knowledge_documents)
-    def documents(
-        self, command: str, *, project_id: str | None = None, **arguments: Any
-    ) -> Any:
+    def documents(self, command: str, *, project_id: str | None = None, **arguments: Any) -> Any:
         """Search/read/list original indexed documents; inspect scan notices before counting.
 
         ``command`` is grep, read or ls. read accepts document and explicit
         start_line/end_line. Feature-gated on the server, with the caller's
         project permissions enforced identically to REST and MCP.
         """
-        return self._run(ops.build_knowledge_documents(body=clean_body({
-            "command": command, "arguments": arguments, "project_id": project_id,
-        })))
+        return self._run(
+            ops.build_knowledge_documents(
+                body=clean_body(
+                    {
+                        "command": command,
+                        "arguments": arguments,
+                        "project_id": project_id,
+                    }
+                )
+            )
+        )
 
     def research(self, query: str, *, project_id: str | None = None) -> Any:
         """A researched, cited answer across the wiki, documents and connected services.

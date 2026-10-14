@@ -124,7 +124,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "DELETE /v1/organizations/{}/external-users/{}",
         lambda c: c.external_users.delete(EXTERNAL_USER, org_id=ORG),
     ),
-    ("POST /v1/knowledge/documents", lambda c: c.knowledge.documents("grep", project_id="p1", pattern="renewal")),
+    (
+        "POST /v1/knowledge/documents",
+        lambda c: c.knowledge.documents("grep", project_id="p1", pattern="renewal"),
+    ),
     ("POST /v1/knowledge/research", lambda c: c.knowledge.research("who owns billing?")),
     ("POST /v1/knowledge/wiki/command", lambda c: c.knowledge.command("ls", check=False)),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
