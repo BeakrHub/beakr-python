@@ -1,0 +1,23 @@
+{
+  "sources": {
+    "beakr-engine": {
+      "repository": "BeakrHub/beakr-engine",
+      "commit": "ed759d4d5b1f61b85f47989148da1b0b82cc0884",
+      "uncommitted_changes": false,
+      "files": {
+        "beakr/api/public/compat.py": "sha256:1b89503c00b6e5451ff3ad02e8e8b8016d4dd0a5f9220717d1649d52e6deb7ee",
+        "derived/replaying-creates.json": "sha256:cfd0ce5b0f3f804ccff30959579176c628d9173d666bef42eab7b85acf30232a",
+        "docs/api/CHANGELOG.md": "sha256:fadf1aa0766e269def5ba5f3f8402e62491826f7e5118573bdcc29fdc900123f",
+        "docs/api/public-openapi.json": "sha256:e3738aa078992b7a734d806cc2e2d2bbe92e72763f702b0c87ba8a48296989d9"
+      }
+    },
+    "beakr-typescript": {
+      "repository": "BeakrHub/beakr-typescript",
+      "commit": "4d7792c5f69608fec3efa2bec0cade282a29cdb8",
+      "uncommitted_changes": false,
+      "files": {
+        "src/replay.ts": "sha256:e6443cf2866ae743f55427679787586db4e3d9d6e8e01c91d48e4ad292c7fe0e"
+      }
+    }
+  }
+}

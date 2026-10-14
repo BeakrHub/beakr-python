@@ -1,0 +1,56 @@
+# Publish beakr-sdk to PyPI when a GitHub release is published.
+#
+# PREPARED, NOT ENABLED. Nothing is uploaded until both:
+#   1. PyPI has a Trusted Publisher for project `beakr-sdk`: owner `BeakrHub`,
+#      repository `beakr-python`, workflow `publish.yml`, environment `pypi`
+#      (use PyPI's pending-publisher flow before the first release); and
+#   2. the repository variable PYPI_PUBLISH_ENABLED is `true`.
+# No API token is stored: the upload authenticates with GitHub's OIDC token.
+name: Publish to PyPI
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+jobs:
+  # Every gate in ci.yml (tests, types, freshness against the engine contract,
+  # release versions and notes, build) must pass before anything is built.
+  ci:
+    if: vars.PYPI_PUBLISH_ENABLED == 'true'
+    uses: ./.github/workflows/ci.yml
+    secrets: inherit
+
+  publish:
+    needs: ci
+    if: vars.PYPI_PUBLISH_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Release tag matches the package version
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          if [ "$TAG" != "v$version" ]; then
+            echo "Release tag $TAG does not match pyproject version $version"
+            exit 1
+          fi
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1

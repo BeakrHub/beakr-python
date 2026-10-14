@@ -1,0 +1,94 @@
+# beakr-python CI: tests, lint, types, freshness against the engine contract,
+# and the release check.
+#
+# The generated layer (src/beakr_sdk/_generated, from the engine's documented
+# public contract, the only contract this package is built from) and the tests
+# that compare with the engine or with the TypeScript SDK (the replayed-create
+# list) read no other repository: they read the files committed under
+# snapshots/beakr-engine and snapshots/beakr-typescript, pinned to a commit of
+# each in snapshots/manifest.json (scripts/refresh_snapshots.py refreshes them
+# from local checkouts). The engine's own CI checks this repository and
+# beakr-typescript out on the branch named like its own and runs these checks
+# against the real repositories, so drift shows up there before a refresh here.
+# publish.yml calls this workflow and publishes only when it passes. No secret
+# is needed.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  # The committed snapshots stand in for engine and TypeScript SDK checkouts.
+  BEAKR_ENGINE_PATH: ${{ github.workspace }}/snapshots/beakr-engine
+  BEAKR_TYPESCRIPT_PATH: ${{ github.workspace }}/snapshots/beakr-typescript
+  # Comparing tests fail instead of skipping when a file is missing.
+  BEAKR_REQUIRE_ENGINE: "1"
+
+jobs:
+  checks:
+    name: tests-and-freshness
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Snapshots match their manifest
+        run: python3 scripts/refresh_snapshots.py verify
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install
+        run: uv sync --frozen
+
+      - name: Generated SDK layers are current
+        run: uv run python scripts/generate_python_sdk.py --check
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Types
+        run: uv run mypy src/beakr_sdk
+
+      - name: Tests
+        run: uv run pytest -q
+
+      - name: Release versions and notes
+        run: uv run python scripts/prepare_release.py check
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          uv build
+          uvx twine check dist/*
+
+  # requires-python is >=3.10: the oldest and newest supported versions run the
+  # suite too, against the same snapshots.
+  python-versions:
+    name: python-${{ matrix.python }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.10", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: Tests
+        run: uv run --frozen pytest -q
