@@ -17,7 +17,7 @@ and :class:`KnowledgeFailed` is raised for them only when asked.
 from __future__ import annotations
 
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 from beakr_sdk._calls import Flow, Sleep
@@ -146,3 +146,47 @@ def wait_for_batch_knowledge_flow(
             on_status=on_status,
         )
     )
+
+
+#: Knowledge states a file is still moving through.
+_IN_FLIGHT = frozenset({"queued", "running"})
+
+
+def wait_for_files_knowledge_flow(
+    file_ids: Sequence[str],
+    *,
+    timeout: float = 600.0,
+    poll: float = 5.0,
+    max_interval: float = 30.0,
+    backoff: float = 1.5,
+) -> Flow:
+    """Poll each file (``GET /v1/artifacts/{id}``) until none is queued or running for Knowledge.
+
+    Returns ``{file_id: knowledge_status}`` (``None`` for a file not sent to
+    Knowledge). Used for the copy an upload duplicated: it is not one of the
+    batch's files, so the batch's own counts never include it.
+    """
+    if poll <= 0 or backoff < 1 or max_interval < poll:
+        raise ValueError("Need poll > 0, backoff >= 1 and max_interval >= poll.")
+    deadline = time.monotonic() + timeout
+    wait_for = poll
+    while True:
+        statuses: dict[str, Any] = {}
+        for file_id in file_ids:
+            artifact = yield ops.build_files_get_artifact(file_id)
+            statuses[file_id] = (artifact or {}).get("knowledge_status")
+        in_flight = [s for s in statuses.values() if s in _IN_FLIGHT]
+        if not in_flight:
+            return statuses
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise KnowledgeTimeout(
+                f"{len(file_ids)} kept file(s)",
+                {
+                    "queued": sum(1 for s in in_flight if s == "queued"),
+                    "running": sum(1 for s in in_flight if s == "running"),
+                    "files": statuses,
+                },
+            )
+        yield Sleep(min(wait_for, remaining))
+        wait_for = next_interval(wait_for, backoff=backoff, max_interval=max_interval)

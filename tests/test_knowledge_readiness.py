@@ -205,3 +205,116 @@ def test_wait_until_ready_reports_each_status_it_reads(client) -> None:
     seen: list[int] = []
     client.projects.wait_until_ready("p1", on_status=lambda s: seen.append(s["queued"]))
     assert seen == [1, 0]
+
+
+# -- An upload whose bytes are already there --------------------------------------
+#
+# Indexing does not store bytes already in the same place twice: it rejects the
+# new file as ``duplicate`` and keeps the existing one. The batch job then reads
+# ``failed``, but the upload did what was asked -- the content is in Beakr -- so
+# the SDK reports it as already uploaded and waits for the kept file instead.
+
+
+def _duplicate_batch(*, also_failed: int = 0) -> httpx.Response:
+    return httpx.Response(
+        200,
+        json={
+            "batch_id": "b1",
+            "status": "completed",
+            "artifacts": [
+                {
+                    "id": "a1",
+                    "path": "a.md",
+                    "title": "a.md",
+                    "status": "index_failed",
+                    "error_code": "duplicate",
+                    "error": "This file has already been uploaded",
+                    "duplicate_of": {"artifact_id": "kept1", "title": "a.md"},
+                }
+            ],
+            "summary": {"total": 1, "failed": 1 + also_failed},
+            "knowledge": {"queued": 0, "running": 0, "failed": 0, "ready": True},
+        },
+    )
+
+
+def _mock_failed_batch_job() -> None:
+    _mock_upload()
+    respx.get(f"{BASE}/v1/jobs/j1").respond(
+        200,
+        json={
+            "job_id": "j1",
+            "status": "failed",
+            "error": {"code": "upload_failed", "message": "Some files failed."},
+        },
+    )
+
+
+@respx.mock
+def test_a_duplicate_is_already_uploaded_and_its_kept_file_is_waited_for(
+    client, tmp_path, sleeps
+) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").mock(return_value=_duplicate_batch())
+    kept = respx.get(f"{BASE}/v1/artifacts/kept1").mock(
+        side_effect=[
+            httpx.Response(200, json={"id": "kept1", "knowledge_status": "running"}),
+            httpx.Response(200, json={"id": "kept1", "knowledge_status": "created"}),
+        ]
+    )
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait="knowledge", poll=1)
+
+    assert result["job"]["status"] == "failed"  # what the server reported
+    assert result["status"] == "succeeded"
+    [duplicate] = result["duplicates"]
+    assert duplicate["path"] == "a.md"
+    assert duplicate["duplicate_of"]["artifact_id"] == "kept1"
+    assert duplicate["kept_knowledge_status"] == "created"
+    assert kept.call_count == 2
+
+
+@respx.mock
+def test_an_index_wait_reports_a_duplicate_without_waiting_for_knowledge(client, tmp_path) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").mock(return_value=_duplicate_batch())
+    kept = respx.get(f"{BASE}/v1/artifacts/kept1")
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait=True)
+
+    assert result["status"] == "succeeded"
+    assert result["duplicates"][0]["duplicate_of"]["artifact_id"] == "kept1"
+    assert not kept.called
+
+
+@respx.mock
+def test_a_real_failure_beside_a_duplicate_still_fails(client, tmp_path) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").mock(return_value=_duplicate_batch(also_failed=1))
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait=True)
+
+    assert result["status"] == "failed"
+    assert len(result["duplicates"]) == 1
+
+
+@respx.mock
+async def test_async_upload_many_treats_a_duplicate_as_already_uploaded(
+    async_client, tmp_path
+) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").mock(return_value=_duplicate_batch())
+    respx.get(f"{BASE}/v1/artifacts/kept1").respond(
+        200, json={"id": "kept1", "knowledge_status": "created"}
+    )
+
+    result = await async_client.files.upload_many(
+        tmp_path / "a.md", project_id="p1", wait="knowledge"
+    )
+
+    assert result["status"] == "succeeded"
+    assert result["duplicates"][0]["kept_knowledge_status"] == "created"

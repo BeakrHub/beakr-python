@@ -14,7 +14,7 @@ Example::
 from __future__ import annotations
 
 import time
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any, Literal
 
@@ -35,8 +35,39 @@ from beakr_sdk.resources._upload import (
     upload_relative_path,
 )
 from beakr_sdk.resources.jobs import Jobs
-from beakr_sdk.resources.knowledge_readiness import wait_for_batch_knowledge_flow
+from beakr_sdk.resources.knowledge_readiness import (
+    wait_for_batch_knowledge_flow,
+    wait_for_files_knowledge_flow,
+)
 from beakr_sdk.resources.uploads import Uploads
+
+
+def already_uploaded_outcome(batch_status: Mapping[str, Any]) -> dict[str, Any]:
+    """The batch's duplicate files, and whether they are its only failures.
+
+    Indexing does not store bytes already in the same place twice: it rejects
+    the new file as ``duplicate`` and keeps the existing one
+    (``duplicate_of``). That is "already uploaded", not a failure, so an upload
+    whose only failed files are duplicates has ``status`` ``"succeeded"``.
+    """
+    files = batch_status.get("artifacts") or []
+    duplicates = [
+        {
+            "path": item.get("path"),
+            "artifact_id": item.get("id"),
+            "duplicate_of": dict(item["duplicate_of"]),
+        }
+        for item in files
+        if item.get("error_code") == "duplicate"
+        and isinstance(item.get("duplicate_of"), Mapping)
+        and item["duplicate_of"].get("artifact_id")
+    ]
+    failed = int((batch_status.get("summary") or {}).get("failed") or 0)
+    outcome: dict[str, Any] = {"duplicates": duplicates}
+    if duplicates and failed <= len(duplicates):
+        outcome["status"] = "succeeded"
+    return outcome
+
 
 #: Page size for listings. Passing ``limit`` is also what makes the list route
 #: answer with the ``{items, next_cursor, has_more}`` wrapper instead of a bare list.
@@ -141,11 +172,18 @@ class Files(Resource[M]):
         Without ``project_id`` the files go to your personal project.
 
         Indexing runs as one job. ``wait=True`` (or ``"index"``) waits for it and
-        adds its final state as ``job``. ``wait="knowledge"`` then also waits
+        adds its final state as ``job``, and the upload's outcome as ``status``.
+        A file whose bytes are already in the same place is not stored twice: it
+        is listed in ``duplicates`` (``path``, ``artifact_id``, and
+        ``duplicate_of``, the file that was kept), and when every failed file is
+        such a duplicate ``status`` is ``"succeeded"`` though the job reports
+        ``failed``. ``wait="knowledge"`` then also waits
         until none of the batch's files is queued or running for Knowledge
         (polling every ``poll`` seconds, growing) and adds the final
         :meth:`batch_status` as ``batch``: each file's ``knowledge_status`` and
-        the batch's ``knowledge`` counts, including ``failed``. Both waits share
+        the batch's ``knowledge`` counts, including ``failed``; it also waits for
+        each kept copy's Knowledge and adds it to its duplicate as
+        ``kept_knowledge_status``. Both waits share
         ``timeout`` seconds (``JobTimeout``, then ``KnowledgeTimeout``). Without
         a wait, pass the result to ``jobs.wait`` later, or read per-file progress
         with :meth:`batch_status`.
@@ -169,7 +207,12 @@ class Files(Resource[M]):
                 return completed
             deadline = time.monotonic() + timeout
             job = yield from Jobs(self._client).wait_flow(completed, timeout=timeout)
-            result = {**completed, "job": job}
+            result: dict[str, Any] = {**completed, "job": job, "status": job.get("status")}
+            if job.get("status") == "failed":
+                batch_now = yield ops.build_uploads_get_bulk_upload_status(
+                    str(completed["batch_id"])
+                )
+                result.update(already_uploaded_outcome(batch_now))
             if wait != "knowledge":
                 return result
             batch = yield from wait_for_batch_knowledge_flow(
@@ -178,7 +221,20 @@ class Files(Resource[M]):
                 poll=poll,
                 max_interval=max(poll, 30.0),
             )
-            return {**result, "batch": batch}
+            result["batch"] = batch
+            kept = sorted({d["duplicate_of"]["artifact_id"] for d in result.get("duplicates", [])})
+            if kept:
+                knowledge = yield from wait_for_files_knowledge_flow(
+                    kept,
+                    timeout=max(0.0, deadline - time.monotonic()),
+                    poll=poll,
+                    max_interval=max(poll, 30.0),
+                )
+                for duplicate in result["duplicates"]:
+                    duplicate["kept_knowledge_status"] = knowledge.get(
+                        duplicate["duplicate_of"]["artifact_id"]
+                    )
+            return result
 
         return self._drive(flow())
 
@@ -289,19 +345,24 @@ class Files(Resource[M]):
     ) -> Any:
         """Read a file's extracted text by any reference a Knowledge read hands out.
 
-        ``reference`` is a file id, a version id, a citation token
-        (``{{artifact:<uuid>-u3}}``) or the file's path as a Sources line prints it
-        (``deals/acme/Closing/memo.docx``, or a trailing part that names one file).
-        Pass ``unit`` (``p. 7``, ``slide 3``, ``sheet 2, B4:D9``, ``lines 10-30``),
-        or write it after the path as ``memo.pdf › p. 7`` (or ``memo.pdf#p. 7``), to
-        read the window around that place instead of the start; a token's own
-        passage is its unit.
+        ``reference`` is a file id, a version id, a source record's ``source_ref``
+        (``beakr-source:v1:...``, from any Knowledge read or research answer), a
+        citation token (``{{artifact:<uuid>-u3}}``) or the file's path as a Sources
+        line prints it (``deals/acme/Closing/memo.docx``, or a trailing part that
+        names one file). Pass ``unit`` (``p. 7``, ``slide 3``, ``sheet 2, B4:D9``,
+        ``lines 10-30``), or write it after the reference as ``memo.pdf › p. 7`` (or
+        ``memo.pdf#p. 7``), to read the window around that place instead of the
+        start; a token's or source_ref's own passage is its unit.
 
         Returns ``{file, unit, text, start, end, total_chars, has_more, next_offset,
         next_reference}``: without a unit pass ``next_offset`` back as ``offset`` to
         continue, with a paged unit read ``next_reference``. A reference that reaches
         no readable file raises ``NotFoundError``; a path naming several files raises
-        ``ConflictError`` (``ambiguous_reference``, its body lists them).
+        ``ConflictError`` (``ambiguous_reference``, its body lists them). Only uploads
+        and canvases are files: a Knowledge page's ``source_ref`` raises
+        ``ValidationError`` (``knowledge_page``; read the page with the knowledge_base
+        ``cat`` command), and a connected item's (Slack, email, calendar, Jira)
+        ``ValidationError`` (``not_a_file``).
         """
         if unit:
             reference = f"{reference}#{unit}"
