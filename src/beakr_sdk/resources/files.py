@@ -289,19 +289,24 @@ class Files(Resource[M]):
     ) -> Any:
         """Read a file's extracted text by any reference a Knowledge read hands out.
 
-        ``reference`` is a file id, a version id, a citation token
-        (``{{artifact:<uuid>-u3}}``) or the file's path as a Sources line prints it
-        (``deals/acme/Closing/memo.docx``, or a trailing part that names one file).
-        Pass ``unit`` (``p. 7``, ``slide 3``, ``sheet 2, B4:D9``, ``lines 10-30``),
-        or write it after the path as ``memo.pdf › p. 7`` (or ``memo.pdf#p. 7``), to
-        read the window around that place instead of the start; a token's own
-        passage is its unit.
+        ``reference`` is a file id, a version id, a source record's ``source_ref``
+        (``beakr-source:v1:...``, from any Knowledge read or research answer), a
+        citation token (``{{artifact:<uuid>-u3}}``) or the file's path as a Sources
+        line prints it (``deals/acme/Closing/memo.docx``, or a trailing part that
+        names one file). Pass ``unit`` (``p. 7``, ``slide 3``, ``sheet 2, B4:D9``,
+        ``lines 10-30``), or write it after the reference as ``memo.pdf › p. 7`` (or
+        ``memo.pdf#p. 7``), to read the window around that place instead of the
+        start; a token's or source_ref's own passage is its unit.
 
         Returns ``{file, unit, text, start, end, total_chars, has_more, next_offset,
         next_reference}``: without a unit pass ``next_offset`` back as ``offset`` to
         continue, with a paged unit read ``next_reference``. A reference that reaches
         no readable file raises ``NotFoundError``; a path naming several files raises
-        ``ConflictError`` (``ambiguous_reference``, its body lists them).
+        ``ConflictError`` (``ambiguous_reference``, its body lists them). Only uploads
+        and canvases are files: a Knowledge page's ``source_ref`` raises
+        ``ValidationError`` (``knowledge_page``; read the page with the knowledge_base
+        ``cat`` command), and a connected item's (Slack, email, calendar, Jira)
+        ``ValidationError`` (``not_a_file``).
         """
         if unit:
             reference = f"{reference}#{unit}"
