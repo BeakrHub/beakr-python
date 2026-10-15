@@ -48,6 +48,7 @@ def test_the_typescript_sdk_carries_the_same_list() -> None:
 @pytest.mark.parametrize(
     ("method", "path", "replays"),
     [
+        ("POST", "/v1/knowledge/wiki/sources/artifact/a1/revert", True),
         ("POST", "/v1/projects", True),
         ("POST", "/v1/projects/", True),
         ("POST", "/v1/projects/p1/members", True),

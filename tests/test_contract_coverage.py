@@ -128,6 +128,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "POST /v1/knowledge/documents",
         lambda c: c.knowledge.documents("grep", project_id="p1", pattern="renewal"),
     ),
+    (
+        "POST /v1/knowledge/wiki/sources/{}/{}/revert",
+        lambda c: c.knowledge.revert_source("artifact", "a1", project_id="p1"),
+    ),
     ("POST /v1/knowledge/research", lambda c: c.knowledge.research("who owns billing?")),
     ("POST /v1/knowledge/wiki/command", lambda c: c.knowledge.command("ls", check=False)),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),

@@ -440,3 +440,12 @@ class Knowledge(Resource[M]):
         )
 
     # -- Knowledge as resources (data, not the door's prose) ------------------
+
+    @returns(ops.build_knowledge_revert_wiki_source)
+    def revert_source(
+        self, source_type: str, source_id: str, *, project_id: str | None = None
+    ) -> Any:
+        """Undo a source's compiled Knowledge contributions."""
+        return self._run(
+            ops.build_knowledge_revert_wiki_source(source_type, source_id, project_id=project_id)
+        )
