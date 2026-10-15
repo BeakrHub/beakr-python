@@ -53,6 +53,36 @@ link = beakr.interviews.create_link("Assay handover", questions=["Controls?"])
 print(link["url"])                                           # shown once; send it
 ```
 
+### Know when Knowledge is ready
+
+Uploaded files reach a project's Knowledge in the background after indexing.
+Wait for it before asking questions that depend on those files, and retry what
+failed:
+
+```python
+from beakr_sdk.resources.knowledge_readiness import KnowledgeFailed
+
+# The batch's own files: indexing, then Knowledge.
+result = beakr.files.upload_many("docs/", project_id=project_id, wait="knowledge", timeout=1800)
+print(result["batch"]["knowledge"])     # {"queued": 0, "running": 0, "created": 41, "failed": 1, ...}
+
+# The whole project.
+status = beakr.projects.wait_until_ready(project_id, timeout=900)   # KnowledgeTimeout if not
+for failed in status["failed_files"]:   # newest first; knowledge_failures() lists them all
+    print(failed["path"], failed["error_code"], failed["reason"])
+if status["failed"]:
+    beakr.projects.retry_failed(project_id)            # or retry_failed(project_id, [file_id])
+
+try:
+    beakr.projects.wait_until_ready(project_id, raise_on_failure=True)
+except KnowledgeFailed as failed:
+    print(failed.status["failed_files"])
+```
+
+`ready` is true when nothing is queued or running. Failed files never end a wait
+early; `error_code` is one of `processing_failed`, `timed_out`,
+`concurrent_update` or `compile_failed`, and a retry is safe to repeat.
+
 Embedded mode (a backend holding a service account's key):
 
 ```python

@@ -13,9 +13,10 @@ Example::
 
 from __future__ import annotations
 
+import time
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
@@ -34,6 +35,7 @@ from beakr_sdk.resources._upload import (
     upload_relative_path,
 )
 from beakr_sdk.resources.jobs import Jobs
+from beakr_sdk.resources.knowledge_readiness import wait_for_batch_knowledge_flow
 from beakr_sdk.resources.uploads import Uploads
 
 #: Page size for listings. Passing ``limit`` is also what makes the list route
@@ -126,8 +128,9 @@ class Files(Resource[M]):
         folder_id: str | None = None,
         ingest: bool = True,
         include_hidden: bool = False,
-        wait: bool = False,
+        wait: bool | Literal["index", "knowledge"] = False,
         timeout: float = 600.0,
+        poll: float = 5.0,
     ) -> Any:
         """Upload several files, or whole directories, as one batch (``/v1/bulk``).
 
@@ -135,11 +138,22 @@ class Files(Resource[M]):
         its own name; a directory's subdirectories become folders (under
         ``folder_id`` when given). Up to 1000 files per call. Returns the batch's
         completion: ``{batch_id, artifacts, folders, failed, job_id, status_url}``.
-        Indexing runs as one job: ``wait=True`` waits for it (up to ``timeout``
-        seconds) and adds its final state as ``job``; otherwise pass the result to
-        ``jobs.wait`` later, or read per-file progress with :meth:`batch_status`.
         Without ``project_id`` the files go to your personal project.
+
+        Indexing runs as one job. ``wait=True`` (or ``"index"``) waits for it and
+        adds its final state as ``job``. ``wait="knowledge"`` then also waits
+        until none of the batch's files is queued or running for Knowledge
+        (polling every ``poll`` seconds, growing) and adds the final
+        :meth:`batch_status` as ``batch``: each file's ``knowledge_status`` and
+        the batch's ``knowledge`` counts, including ``failed``. Both waits share
+        ``timeout`` seconds (``JobTimeout``, then ``KnowledgeTimeout``). Without
+        a wait, pass the result to ``jobs.wait`` later, or read per-file progress
+        with :meth:`batch_status`.
         """
+        if wait not in (False, True, "index", "knowledge"):
+            raise ValueError("wait must be False, True, 'index' or 'knowledge'")
+        if wait == "knowledge" and not ingest:
+            raise ValueError("wait='knowledge' needs ingest=True; these stay out of Knowledge")
         entries = batch_entries(paths, include_hidden=include_hidden)
         relative_paths = batch_relative_paths(paths, include_hidden=include_hidden)
 
@@ -153,14 +167,29 @@ class Files(Resource[M]):
             )
             if not wait:
                 return completed
+            deadline = time.monotonic() + timeout
             job = yield from Jobs(self._client).wait_flow(completed, timeout=timeout)
-            return {**completed, "job": job}
+            result = {**completed, "job": job}
+            if wait != "knowledge":
+                return result
+            batch = yield from wait_for_batch_knowledge_flow(
+                str(completed["batch_id"]),
+                timeout=max(0.0, deadline - time.monotonic()),
+                poll=poll,
+                max_interval=max(poll, 30.0),
+            )
+            return {**result, "batch": batch}
 
         return self._drive(flow())
 
     @returns(ops.build_uploads_get_bulk_upload_status)
     def batch_status(self, batch_id: str) -> Any:
-        """Per-file indexing status of an :meth:`upload_many` batch, with counts."""
+        """Per-file status of an :meth:`upload_many` batch, with counts.
+
+        Each file has its indexing ``status`` and its ``knowledge_status``; the
+        batch has indexing ``summary`` counts and ``knowledge`` counts
+        (``queued``, ``running``, ``created``, ``failed``, ``ready``...).
+        """
         return self._run(ops.build_uploads_get_bulk_upload_status(batch_id))
 
     def upload_folder(
