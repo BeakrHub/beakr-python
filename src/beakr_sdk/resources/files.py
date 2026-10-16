@@ -377,8 +377,50 @@ class Files(Resource[M]):
         """Extracted text: ``{content, original_format, version_id, title}``."""
         return self._run(ops.build_files_get_artifact_content(artifact_id))
 
+    @returns(ops.build_files_download_url)
+    def download_link(self, reference: str, *, inline: bool = False) -> Any:
+        """A short-lived signed URL for a file's original bytes, by any reference.
+
+        ``reference`` is anything :meth:`read` takes: a source record's
+        ``source_ref`` from a Knowledge read, research answer or documents
+        search, a file or version id, a citation token or a path. A reference
+        that names a version downloads that version; any other, the current one.
+        Returns ``{url, expires_in, filename, mime_type, file}``. A Knowledge
+        page's or connected item's reference raises ``ValidationError``
+        (``knowledge_page``, ``not_a_file``); a Beakr document with no stored
+        original ``ConflictError`` (``no_original_file``); a file you cannot read
+        ``NotFoundError``.
+        """
+        return self._run(
+            ops.build_files_download_url(body={"reference": reference, "inline": inline})
+        )
+
+    def download_reference(self, reference: str, destination: str | Path) -> Any:
+        """Save the original file a reference names (a ``source_ref``, id or path).
+
+        ``destination`` may be a directory, which keeps the file's name. Returns the path.
+        """
+        target = Path(destination)
+
+        def flow() -> Flow:
+            signed = yield ops.build_files_download_url(body={"reference": reference})
+            data = yield Call(
+                "GET", signed["url"], external=True, authenticated=False, response="bytes"
+            )
+            path = target
+            if target.is_dir():
+                path = target / Path(str(signed.get("filename") or reference)).name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            return path
+
+        return self._drive(flow())
+
     def download_url(self, artifact_id: str) -> Any:
-        """A short-lived presigned URL for the current version's original bytes."""
+        """A short-lived presigned URL for the current version's original bytes.
+
+        :meth:`download_link` does this in one request, from any reference.
+        """
         return self._drive(self._download_url_flow(artifact_id))
 
     def _download_url_flow(self, artifact_id: str) -> Flow:

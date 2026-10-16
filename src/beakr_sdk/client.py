@@ -117,7 +117,6 @@ class Beakr(BaseClient):
         #: Every public operation, one typed method each (generated from the contract).
         self.api = BeakrApi(self)
 
-
     def close(self) -> None:
         if self._owns_http:
             self._http.close()

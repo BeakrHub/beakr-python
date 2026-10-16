@@ -20,6 +20,7 @@ wherever the source came from::
         "upload_path": "plans/Q3 plan.pdf",  # the uploader's relative path, when different
         "provider_item_id": "...",
         "file_id": "...",                    # Beakr's copy: `beakr files download <id>`
+        "version_id": "...",                 # the version the passage was read from
       },
       "evidence": {"excerpt", "locator", "fidelity", "evidence_kind", "anchor_status"},
       "status": {"observed_at", "availability", "changed_since_cited"},
@@ -97,6 +98,7 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         "provider_item_id": public_location.get("provider_item_id")
         or first("provider_file_id", "remote_file_id"),
         "file_id": file_id,
+        "version_id": public_location.get("version_id") if file_id else None,
     }
     evidence = {
         "excerpt": public_evidence.get("excerpt") or first("excerpt", "excerpt_text", "quote"),
