@@ -279,13 +279,14 @@ class Knowledge(Resource[M]):
         ``table`` is ``facts``, ``connections`` or ``findings``; ``page_type`` and
         ``entity`` narrow the cards. ``to`` keeps Connections pointing at a page;
         ``connected_to`` keeps cards linked to a page in either direction; ``as_of``
-        (Facts) reads each card's value on that date. ``group_by`` answers counts
-        and totals per group instead of rows; ``regex`` reads ``attribute``, ``to``
-        and ``query`` as regular expressions; ``view`` is ``values`` (default),
-        ``fields`` or ``groups``; ``field_id`` selects one field as the field
-        inventory names it; ``match`` is ``exact``, ``similar`` or ``meaning``
-        (the default) for how ``attribute`` finds a field; ``after_card`` continues
-        a card scan that stopped at its cap.
+        (Facts, a day such as ``2026-01-31``) reads each card's value on that day.
+        ``group_by`` answers counts and totals per group instead of rows; ``regex``
+        reads ``attribute``, ``to`` and ``query`` as regular expressions; ``view``
+        is ``values`` (default), ``fields`` or ``groups``; ``field_id`` selects one
+        field as the field inventory names it; ``match`` is ``meaning`` (the
+        default), ``similar`` (words only) or ``exact``, for how ``attribute`` finds
+        a field and ``query`` matches values; ``after_card`` continues a card scan
+        that stopped at its cap.
         """
         return self.command(
             "rows",
