@@ -26,6 +26,8 @@ beakr.jobs.wait(batch)                                               # until it 
 
 hits = beakr.knowledge.sections("launch date", scope="Research")
 card = beakr.knowledge.cat("Launch Plan", scope="Research")
+found = beakr.knowledge.documents_search("who covers losses from defects", project_id="Research")
+beakr.files.download_reference(found["results"][0]["source_ref"], "downloads/")
 facts = beakr.knowledge.rows(table="facts", entity="Stripe", current_only=True)
 beakr.knowledge.add_finding(
     "Stripe", date="2026-10-01", kind="decision", text="Stay on Stripe through 2027",

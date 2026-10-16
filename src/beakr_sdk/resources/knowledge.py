@@ -303,9 +303,10 @@ class Knowledge(Resource[M]):
     def documents(self, command: str, *, project_id: str | None = None, **arguments: Any) -> Any:
         """Search/read/list original indexed documents; inspect scan notices before counting.
 
-        ``command`` is grep, read or ls. read accepts document and explicit
-        start_line/end_line. Feature-gated on the server, with the caller's
-        project permissions enforced identically to REST and MCP.
+        ``command`` is grep, read, ls or search. read accepts document and explicit
+        start_line/end_line. ``project_id`` is a project id or name; without it a
+        command covers everything you can read. Feature-gated on the server, with
+        the caller's project permissions enforced identically to REST and MCP.
         """
         return self._run(
             ops.build_knowledge_documents(
@@ -318,6 +319,48 @@ class Knowledge(Resource[M]):
                 )
             )
         )
+
+    def documents_search(
+        self,
+        query: str,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        passages: int | None = None,
+        path: str | None = None,
+        glob: str | list[str] | None = None,
+        type: str | list[str] | None = None,
+        document: str | None = None,
+        project_id: str | None = None,
+    ) -> Any:
+        """Passages of the original documents ranked by meaning, grouped by document.
+
+        For when you do not know the words a document uses; ``grep`` finds and
+        counts every literal mention. Returns ``{content, sources, results}``:
+        ``results`` is one source record per matching document, best first, with
+        ``source_ref``, ``location`` (``display_path``, ``file_id``,
+        ``version_id``), ``match`` (strong, moderate or weak), ``score`` and its
+        best ``passages`` (``source_ref``, ``unit_locator``, ``line_start``/
+        ``line_end``, ``excerpt``, ``match``, ``score``). ``limit`` documents per
+        page (default 8, max 25) from ``offset``; ``passages`` per document
+        (default 2, max 5). Download a result's file with
+        ``files.download_link(record["source_ref"])``.
+        """
+        arguments = {
+            key: value
+            for key, value in {
+                "query": query,
+                "limit": limit,
+                "offset": offset,
+                "passages": passages,
+                "path": path,
+                "glob": glob,
+                "type": type,
+                "document": document,
+            }.items()
+            if value is not None
+        }
+        return self.documents("search", project_id=project_id, **arguments)
 
     def research(self, query: str, *, project_id: str | None = None, quick: bool = False) -> Any:
         """A researched, cited answer across the wiki, documents and connected services.
