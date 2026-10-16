@@ -66,3 +66,20 @@ def test_research_waits_for_server_and_preserves_longer_client_timeout(timeout, 
         ) as client:
             client.knowledge.research("q")
     assert route.calls[0].request.extensions["timeout"]["read"] == expected
+
+
+@pytest.mark.asyncio
+async def test_quick_research_sends_quick_and_waits_less_in_both_clients():
+    with respx.mock:
+        route = respx.post("https://api.test/v1/knowledge/research").mock(
+            return_value=Response(200, json={"text": "ok", "engine": "quick"})
+        )
+        with Beakr(api_key="test", base_url="https://api.test", timeout=5.0) as client:
+            assert client.knowledge.research("q", quick=True)["engine"] == "quick"
+        async with AsyncBeakr(api_key="test", base_url="https://api.test") as client:
+            await client.knowledge.research("q", quick=True)
+        with Beakr(api_key="test", base_url="https://api.test") as client:
+            client.knowledge.research("q")
+    sent = [json.loads(call.request.content) for call in route.calls]
+    assert sent == [{"query": "q", "quick": True}, {"query": "q", "quick": True}, {"query": "q"}]
+    assert route.calls[0].request.extensions["timeout"]["read"] == 30.0
