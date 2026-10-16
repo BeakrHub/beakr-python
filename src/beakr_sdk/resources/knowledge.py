@@ -37,6 +37,8 @@ from beakr_sdk.resources.knowledge_pages import KnowledgePages
 #: the engine gives the research route up to 150s (an agentic loop that reads
 #: documents from connected services), so a 60s client would give up first.
 RESEARCH_TIMEOUT = 170.0
+#: Seconds a quick research call waits: the engine ends a quick run within 16s.
+QUICK_RESEARCH_TIMEOUT = 30.0
 
 
 def result_text(result: dict[str, Any]) -> str:
@@ -317,15 +319,20 @@ class Knowledge(Resource[M]):
             )
         )
 
-    def research(self, query: str, *, project_id: str | None = None) -> Any:
+    def research(self, query: str, *, project_id: str | None = None, quick: bool = False) -> Any:
         """A researched, cited answer across the wiki, documents and connected services.
 
         Waits up to :data:`RESEARCH_TIMEOUT` seconds (or the client's timeout,
-        if longer): the engine allows research up to 150s.
+        if longer): the engine allows research up to 150s. With ``quick=True``
+        the engine answers within 15 seconds from one search of Knowledge and
+        uploaded documents (no connected services); the answer's ``engine`` is
+        ``quick`` and ``stopped_early`` is true when it is the cited results
+        without a written summary.
         """
-        body = clean_body({"query": query, "project_id": project_id})
+        body = clean_body({"query": query, "project_id": project_id, "quick": quick or None})
         call = ops.build_knowledge_research(body=body)
-        return self._run(dataclasses.replace(call, min_timeout=RESEARCH_TIMEOUT))
+        timeout = QUICK_RESEARCH_TIMEOUT if quick else RESEARCH_TIMEOUT
+        return self._run(dataclasses.replace(call, min_timeout=timeout))
 
     # -- card writes -----------------------------------------------------------
 
