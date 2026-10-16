@@ -230,6 +230,16 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         None,
     ),
     (
+        # The hash of the read that was reviewed, sent unchanged; the helper never
+        # fetches the proposal to fill it in (security review, 2026-10-16).
+        "accept_reviewed",
+        lambda c: c.knowledge.proposals.accept("x1", reviewed_hash="ab" * 32),
+        "POST",
+        "/v1/knowledge/wiki/proposals/x1/accept",
+        {},
+        {"reviewed_hash": "ab" * 32},
+    ),
+    (
         "research",
         lambda c: c.knowledge.research("why?", project_id="p1"),
         "POST",
@@ -347,3 +357,25 @@ def test_knowledge_check_false_returns_the_refusal(client) -> None:
     )
     result = client.knowledge.command("cat", page="x", check=False)
     assert result["outcome"]["status"] == "error"
+
+
+@respx.mock
+def test_proposal_accept_sends_the_reviewed_hash_as_given_and_never_reads_first(client) -> None:
+    # ROOT CAUSE (security review, 2026-10-16): an accept that reads the proposal
+    # and echoes that read's content_hash binds to whatever the proposal is at
+    # accept time, so a proposal changed after review is accepted anyway. The
+    # helper sends only the hash it is given, and none when it is given none.
+    read = respx.get(f"{BASE}/v1/knowledge/wiki/proposals/x1").respond(
+        200, json={"id": "x1", "content_hash": "cd" * 32}
+    )
+    accept = respx.post(f"{BASE}/v1/knowledge/wiki/proposals/x1/accept").respond(
+        200, json={"status": "accepted", "proposal_id": "x1"}
+    )
+
+    client.knowledge.proposals.accept("x1", reviewed_hash="ab" * 32)
+    client.knowledge.proposals.accept("x1")
+
+    assert not read.called
+    bodies = [call.request.content for call in accept.calls]
+    assert json.loads(bodies[0]) == {"reviewed_hash": "ab" * 32}
+    assert bodies[1] == b""
