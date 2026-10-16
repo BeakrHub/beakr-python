@@ -89,9 +89,19 @@ class Proposals(Resource[M]):
         return self._run(ops.build_knowledge_get_proposal(proposal_id))
 
     @returns(ops.build_knowledge_accept_proposal)
-    def accept(self, proposal_id: str) -> Any:
-        """Apply a proposal. Returns ``{status, proposal_id, page_ids, ...}``."""
-        return self._run(ops.build_knowledge_accept_proposal(proposal_id))
+    def accept(self, proposal_id: str, *, reviewed_hash: str | None = None) -> Any:
+        """Apply a proposal. Returns ``{status, proposal_id, page_ids, ...}``.
+
+        ``reviewed_hash`` is the ``content_hash`` of the :meth:`show` you reviewed,
+        passed unchanged: a proposal that changed since is refused (409
+        ``proposal_changed``) and nothing is applied, and a proposal that changes a
+        card's table rows can require it (422 ``review_required``). This method
+        never reads the proposal to fill it in, because a hash from a read made at
+        accept time would bind the accept to whatever the proposal is then rather
+        than to what was reviewed.
+        """
+        body = {"reviewed_hash": reviewed_hash} if reviewed_hash is not None else None
+        return self._run(ops.build_knowledge_accept_proposal(proposal_id, body=body))
 
     @returns(ops.build_knowledge_dismiss_proposal)
     def dismiss(self, proposal_id: str) -> Any:
