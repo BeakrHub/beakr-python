@@ -7,6 +7,14 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `POST /v1/knowledge/wiki/command` `query` with an `entity_type` and a `field`
+  condition, and `rows` with `page_type` and an `attribute` or `field_id`, say
+  which cards of that type hold no value for the field: a line `K of N <type>
+  cards have no <field>: <up to 10 titles> (open them to check).`, and the
+  `query` result's `missing` (`KnowledgeQueryMissingField`). `rows` reads
+  `value` as `query` and `entity_type` as `page_type`; `query` reads `offset` as
+  a cursor; `cat` and `hover` open the page a guessed title's leading identifier
+  names; `documents` `ls` with a `glob` lists the matching documents.
 - `POST /v1/knowledge/wiki/write` `edit_rows`: an `old_rows` entry may give a
   long value by its start, up to a word end or ending in `...`, when exactly one
   row of that field starts that way. A start that several rows share is refused
