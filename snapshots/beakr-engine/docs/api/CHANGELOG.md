@@ -11,10 +11,22 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=6ef339bca53b7013900ac455da6c5800ee589e73c883df8998dba3664fd8edf3 changelog sha256=2bb371fc92dd044f18d26b14408f0efb6c35a888c90ff6e343b66cad01569e57 -->
+<!-- contract-stamp: public-openapi sha256=6ef339bca53b7013900ac455da6c5800ee589e73c883df8998dba3664fd8edf3 changelog sha256=af45a1f4d492c5a2f1daa6654a8d9b1ce939271e01d41742fc4502f99d831b29 -->
 ## 1.0.0 (unreleased)
 
 The first public version.
+
+- `POST /v1/knowledge/documents` and `POST /v1/knowledge/wiki/command` accept a
+  call that sends every option, as clients using strict function calling do.
+  An unset option may be sent as `""`, `0` or `false` on `documents`, and
+  `group_by` takes `"none"`; `0` for a count, a limit or a line number means its
+  default (it used to be raised to 1, or refused for `end_line`), and `read`
+  with `start_line` `0` reads the passage its citation token names. On
+  `wiki/command`, `0` for `limit`, `rev`, `rev2`, `matches_per_page` or
+  `sources_per_section` means its default, and an option the command does not
+  take is accepted when it is `0` or its default (`mode` `text`, `table`
+  `facts`, ...). `cat` resolves a page given as a citation token with a missing
+  closing brace.
 
 - `POST /v1/knowledge/wiki/command` `query` `sql` reads `SELECT DISTINCT keys`
   as `GROUP BY` those keys, and accepts `LOWER()` and `UPPER()` around a
