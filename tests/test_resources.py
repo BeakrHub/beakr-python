@@ -267,6 +267,49 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         None,
     ),
     (
+        "query",
+        lambda c: c.knowledge.query(
+            {
+                "from": {"table": "facts", "as": "f"},
+                "where": {
+                    "and": [
+                        {"entity_type": "agreement"},
+                        {"field": "governing law", "match": "similar"},
+                        {"not": {"value": "Delaware", "op": "contains"}},
+                    ]
+                },
+                "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
+                "group_by": ["value"],
+                "aggregate": [{"fn": "count", "of": "entity"}],
+                "order_by": [{"by": "count", "dir": "desc"}],
+                "limit": 20,
+            },
+            scope="Contracts",
+        ),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "query",
+            "spec": {
+                "from": {"table": "facts", "as": "f"},
+                "where": {
+                    "and": [
+                        {"entity_type": "agreement"},
+                        {"field": "governing law", "match": "similar"},
+                        {"not": {"value": "Delaware", "op": "contains"}},
+                    ]
+                },
+                "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
+                "group_by": ["value"],
+                "aggregate": [{"fn": "count", "of": "entity"}],
+                "order_by": [{"by": "count", "dir": "desc"}],
+                "limit": 20,
+            },
+            "scope": "Contracts",
+        },
+    ),
+    (
         "accept",
         lambda c: c.knowledge.proposals.accept("x1"),
         "POST",

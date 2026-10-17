@@ -36,6 +36,7 @@ from beakr_sdk.errors import (
     ServerError,
     ValidationError,
 )
+from beakr_sdk.query_spec import QuerySpec
 
 __all__ = [
     "APIConnectionError",
@@ -48,6 +49,7 @@ __all__ = [
     "KnowledgeCommandError",
     "NotFoundError",
     "PermissionDeniedError",
+    "QuerySpec",
     "RateLimitError",
     "RunFailedError",
     "RunNeedsInputError",
