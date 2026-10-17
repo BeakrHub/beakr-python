@@ -248,22 +248,39 @@ class Knowledge(Resource[M]):
             scope=scope,
         )
 
-    def query(self, spec: QuerySpec, *, scope: str | None = None) -> Any:
-        """Ask a question of every map card's rows as one structured spec (the ``query`` command).
+    def query(
+        self,
+        spec: QuerySpec | None = None,
+        *,
+        sql: str | None = None,
+        cursor: str | None = None,
+        scope: str | None = None,
+    ) -> Any:
+        """Ask a question of every map card's rows (the ``query`` command), as SQL or a spec.
 
-        ``spec`` is JSON (see :mod:`beakr_sdk.query_spec`): ``from`` a table,
-        ``where`` an and/or/not tree of conditions on entity, entity type, field,
-        value, when, as of, to and connected to, up to two ``join`` s on the same
-        card or the card a connection points at, ``group_by`` with ``aggregate``,
-        ``order_by``, ``limit`` and ``cursor``, and ``semantic`` to rank or keep
-        fields by meaning. Only cards you can read are queried; ``scope`` narrows
-        them to one project (name or id). Where enabled for the organization.
+        ``sql`` is one SELECT, for example ``SELECT value, COUNT(DISTINCT entity) AS
+        cards FROM facts AS OF CURRENT_DATE WHERE entity_type = 'matter' AND field =
+        'Current status' GROUP BY value ORDER BY cards DESC``. The engine parses it
+        into a spec and never runs it as SQL: ``FROM`` facts, connections or
+        findings, up to two ``JOIN`` s on ``SAME_CARD(a)`` or ``TARGET_CARD(a)``,
+        ``WHERE`` with AND/OR/NOT, ``AS OF`` a day, ``GROUP BY``, ``COUNT``, ``MIN``,
+        ``MAX``, ``SUM``, ``AVG``, ``ORDER BY`` and ``LIMIT``. ``spec`` is the same
+        query as JSON (see :mod:`beakr_sdk.query_spec`). Send one of them. Only
+        cards you can read are queried; ``scope`` narrows them to one project
+        (name or id); ``cursor`` continues a previous answer. Where enabled for the
+        organization.
 
-        The answer is text: the total and what ran in words, a cursor line when
-        more follow (pass it back as ``cursor``), and a table. A spec the engine
-        cannot run raises :class:`KnowledgeCommandError` (``invalid_arguments``).
+        The answer's text opens with what the query was understood as (for ``sql``
+        the spec it was translated to, how each name resolved, what was defaulted
+        or applied), then the total and a table; its ``query`` holds the same as
+        data (``spec``, ``columns``, ``rows``, ``total``, ``next_cursor``). A query
+        the engine cannot run raises :class:`KnowledgeCommandError`
+        (``invalid_arguments``).
         """
-        return self.command("query", spec=dict(spec), scope=scope)
+        if (spec is None) == (sql is None):
+            raise ValueError("query takes sql or spec, not both and not neither")
+        arguments: dict[str, Any] = {"sql": sql} if sql is not None else {"spec": dict(spec)}
+        return self.command("query", scope=scope, cursor=cursor, **arguments)
 
     def rows(
         self,
