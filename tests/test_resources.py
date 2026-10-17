@@ -280,7 +280,7 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
                 },
                 "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
                 "group_by": ["value"],
-                "aggregate": [{"fn": "count", "of": "entity"}],
+                "aggregate": [{"fn": "count"}, {"fn": "count_distinct", "of": "entity"}],
                 "order_by": [{"by": "count", "dir": "desc"}],
                 "limit": 20,
             },
@@ -302,7 +302,7 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
                 },
                 "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
                 "group_by": ["value"],
-                "aggregate": [{"fn": "count", "of": "entity"}],
+                "aggregate": [{"fn": "count"}, {"fn": "count_distinct", "of": "entity"}],
                 "order_by": [{"by": "count", "dir": "desc"}],
                 "limit": 20,
             },
@@ -467,3 +467,13 @@ def test_proposal_accept_sends_the_reviewed_hash_as_given_and_never_reads_first(
     bodies = [call.request.content for call in accept.calls]
     assert json.loads(bodies[0]) == {"reviewed_hash": "ab" * 32}
     assert bodies[1] == b""
+
+
+def test_a_count_aggregate_needs_no_of() -> None:
+    # The engine counts rows for "count" and refuses "of" on it, so the typed
+    # shape must not require "of" (it did, which made a valid count spec fail
+    # type-checking and the type-checked one fail on the engine).
+    from beakr_sdk.query_spec import Aggregate
+
+    assert Aggregate.__required_keys__ == frozenset({"fn"})
+    assert Aggregate.__optional_keys__ == frozenset({"of"})

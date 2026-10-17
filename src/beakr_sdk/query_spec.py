@@ -105,10 +105,14 @@ Join = TypedDict(
 )
 
 
-class Aggregate(TypedDict):
+class _AggregateFn(TypedDict):
     fn: AggregateFn
-    #: A group key for ``count_distinct``; ``value_number``, ``value_amount`` or
-    #: ``value_date`` for the others.
+
+
+class Aggregate(_AggregateFn, total=False):
+    #: Left out for ``count``, which counts rows and refuses ``of``. A group key
+    #: or typed column for ``count_distinct``; ``value_number``, ``value_amount``
+    #: or ``value_date`` for the others (not ``value_date`` for ``sum``/``avg``).
     of: str
 
 
