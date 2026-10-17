@@ -11,10 +11,16 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=ce31d421aba6f267cc2294a21a5d7b2463dc2a198b649d5afb6e291a31f1d902 changelog sha256=a10a254b0b9174a6f7834940fb1738dd53cf27f2c51c67586a27229d6a09ecc5 -->
+<!-- contract-stamp: public-openapi sha256=ce31d421aba6f267cc2294a21a5d7b2463dc2a198b649d5afb6e291a31f1d902 changelog sha256=3f9859762cf095dc173e88eafe8ad8fd032869c99c9860084bbc25871f5dadd2 -->
 ## 1.0.0 (unreleased)
 
 The first public version.
+
+- `POST /v1/knowledge/documents` `grep` given `query` and no `pattern` uses the
+  query as the pattern, and the reply's first line says so (it was refused with
+  `pattern is required`). `read` takes a document key carrying the full id, such
+  as `artifact:<id>` from a Knowledge source list, with or without braces (it
+  was looked up as a title).
 
 - `POST /v1/knowledge/wiki/command` `query` with an `entity_type` and a `field`
   condition, and `rows` with `page_type` and an `attribute` or `field_id`, say
@@ -39,6 +45,7 @@ The first public version.
 - `POST /v1/knowledge/documents` `ls` with a `glob` lists the matching
   documents, flat, with or without `recursive`. It used to list only the
   folders holding them.
+
 - `POST /v1/knowledge/documents` and `POST /v1/knowledge/wiki/command` accept a
   call that sends every option, as clients using strict function calling do.
   An unset option may be sent as `""`, `0` or `false` on `documents`, and
