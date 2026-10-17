@@ -30,6 +30,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.errors import KnowledgeCommandError
+from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources._base import Resource, as_list
 from beakr_sdk.resources.knowledge_pages import KnowledgePages
 
@@ -246,6 +247,23 @@ class Knowledge(Resource[M]):
             page_type=page_type,
             scope=scope,
         )
+
+    def query(self, spec: QuerySpec, *, scope: str | None = None) -> Any:
+        """Ask a question of every map card's rows as one structured spec (the ``query`` command).
+
+        ``spec`` is JSON (see :mod:`beakr_sdk.query_spec`): ``from`` a table,
+        ``where`` an and/or/not tree of conditions on entity, entity type, field,
+        value, when, as of, to and connected to, up to two ``join`` s on the same
+        card or the card a connection points at, ``group_by`` with ``aggregate``,
+        ``order_by``, ``limit`` and ``cursor``, and ``semantic`` to rank or keep
+        fields by meaning. Only cards you can read are queried; ``scope`` narrows
+        them to one project (name or id). Where enabled for the organization.
+
+        The answer is text: the total and what ran in words, a cursor line when
+        more follow (pass it back as ``cursor``), and a table. A spec the engine
+        cannot run raises :class:`KnowledgeCommandError` (``invalid_arguments``).
+        """
+        return self.command("query", spec=dict(spec), scope=scope)
 
     def rows(
         self,
