@@ -254,9 +254,18 @@ class Knowledge(Resource[M]):
         entity: str | None = None,
         attribute: str | None = None,
         query: str | None = None,
+        to: str | None = None,
+        connected_to: str | None = None,
+        as_of: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         current_only: bool | None = None,
+        group_by: str | None = None,
+        regex: bool | None = None,
+        view: str | None = None,
+        field_id: str | None = None,
+        match: str | None = None,
+        after_card: str | None = None,
         order_by: str | None = None,
         descending: bool | None = None,
         page_type: str | None = None,
@@ -265,16 +274,38 @@ class Knowledge(Resource[M]):
         include_evidence: bool | None = None,
         scope: str | None = None,
     ) -> Any:
-        """Every map card's ``facts``, ``connections`` or ``findings`` rows as one table."""
+        """Every map card's ``facts``, ``connections`` or ``findings`` rows as one table.
+
+        ``table`` is ``facts``, ``connections`` or ``findings``; ``page_type`` and
+        ``entity`` narrow the cards. ``to`` keeps Connections pointing at a page;
+        ``connected_to`` keeps cards linked to a page in either direction; ``as_of``
+        (Facts, a day such as ``2026-01-31``) reads each card's value on that day.
+        ``group_by`` answers counts and totals per group instead of rows; ``regex``
+        reads ``attribute``, ``to`` and ``query`` as regular expressions; ``view``
+        is ``values`` (default), ``fields`` or ``groups``; ``field_id`` selects one
+        field as the field inventory names it; ``match`` is ``meaning`` (the
+        default), ``similar`` (words only) or ``exact``, for how ``attribute`` finds
+        a field and ``query`` matches values; ``after_card`` continues a card scan
+        that stopped at its cap.
+        """
         return self.command(
             "rows",
             table=table,
             entity=entity,
             attribute=attribute,
             query=query,
+            to=to,
+            connected_to=connected_to,
+            as_of=as_of,
             start_date=start_date,
             end_date=end_date,
             current_only=current_only,
+            group_by=group_by,
+            regex=regex,
+            view=view,
+            field_id=field_id,
+            match=match,
+            after_card=after_card,
             order_by=order_by,
             descending=descending,
             page_type=page_type,
