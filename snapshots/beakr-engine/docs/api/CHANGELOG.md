@@ -11,15 +11,39 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=ba8132085bc515e0ec1082fed2103bf894f12082b9a5d4e44e07a6666d459905 changelog sha256=b52dd2ebca43c3195a219cdb19b372e5d12ca0cb31e5bc70185cce9bdf90b0ff -->
+<!-- contract-stamp: public-openapi sha256=ba8132085bc515e0ec1082fed2103bf894f12082b9a5d4e44e07a6666d459905 changelog sha256=77beed1acd60ea0572e161624f77a801209d3c1c56655a37dbde10e09d4b2984 -->
 ## 1.0.0 (unreleased)
 
 The first public version.
+
+- `POST /v1/knowledge/documents` `search` answers within about 8 seconds when
+  the embedding service is slow or failing: it ranks the passages by wording
+  alone and says so (the first line reads "ranked by wording only", a notice
+  gives the reason, and `results` carry no `match` label), where it used to
+  wait for two full attempts or fail. A repeated query reuses its embedding
+  for 15 minutes. `grep` `glob` (and `path`) take `{a,b}` alternatives, for
+  example `*.{docx,pdf}`, which used to select no document; a comma inside
+  braces does not split a comma-separated `glob` list. A `grep` pattern that
+  requires two terms with lookaheads, `(?s)(?=.*first)(?=.*second).*` with
+  `multiline`, now reads only the passages holding both terms instead of
+  scanning every document until the time budget ran out. A `pattern` that
+  reads as a file-name glob (`*.docx`) is refused with a pointer to `glob`.
 
 - `POST /v1/knowledge/wiki/command` answers 400 when the body nests the
   command's options under `arguments` or `args`: the options go at the top
   level of the body, next to `command`. They used to be ignored, so the read
   ran without them.
+
+- `POST /v1/knowledge/wiki/command` `query` with `as_of` (`AS OF` in `sql`)
+  keeps, for a card whose field has no dated value at all, its current undated
+  value instead of leaving the card out; the answer's `Applied:` line (and the
+  `query` object's `applied`) says how many cards were answered that way. A
+  `spec` sent with its keys at the top level beside `command`, and a SELECT sent
+  as `query`, now run, and the answer says how they were read; a guessed
+  `{"table": ..., "filters": [...]}` is refused with the `sql` call it most
+  likely meant. In a `spec`, `field` also takes `{"equals"|"contains"|"like"|
+  "meaning": name}`. Knowledge text that points at a cited file names `read_file`
+  to the hosted MCP server and `documents read` to other callers.
 
 - `POST /v1/knowledge/wiki/command` `query` answers open with what the query
   was understood as: for `sql`, a `Translated to spec:` line with the spec as
