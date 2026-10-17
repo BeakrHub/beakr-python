@@ -267,6 +267,23 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         None,
     ),
     (
+        "query sql",
+        lambda c: c.knowledge.query(
+            sql="SELECT value, COUNT(*) AS n FROM facts WHERE field = 'Status' GROUP BY value",
+            cursor="abc",
+            scope="Contracts",
+        ),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "query",
+            "sql": "SELECT value, COUNT(*) AS n FROM facts WHERE field = 'Status' GROUP BY value",
+            "cursor": "abc",
+            "scope": "Contracts",
+        },
+    ),
+    (
         "query",
         lambda c: c.knowledge.query(
             {
@@ -477,3 +494,12 @@ def test_a_count_aggregate_needs_no_of() -> None:
 
     assert Aggregate.__required_keys__ == frozenset({"fn"})
     assert Aggregate.__optional_keys__ == frozenset({"of"})
+
+
+def test_query_takes_sql_or_spec_not_both(client) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="sql or spec"):
+        client.knowledge.query({"from": "facts"}, sql="SELECT * FROM facts")
+    with pytest.raises(ValueError, match="sql or spec"):
+        client.knowledge.query()
