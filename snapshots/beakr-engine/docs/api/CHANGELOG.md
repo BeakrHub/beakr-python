@@ -11,7 +11,7 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=6ef339bca53b7013900ac455da6c5800ee589e73c883df8998dba3664fd8edf3 changelog sha256=f43f40356e1a348327b3b7512063299eaf0e31c122df3be7db9026a832d97e43 -->
+<!-- contract-stamp: public-openapi sha256=6ef339bca53b7013900ac455da6c5800ee589e73c883df8998dba3664fd8edf3 changelog sha256=2bb371fc92dd044f18d26b14408f0efb6c35a888c90ff6e343b66cad01569e57 -->
 ## 1.0.0 (unreleased)
 
 The first public version.
@@ -21,8 +21,19 @@ The first public version.
   condition's column or text (matching is already case-insensitive); the reply's
   `Applied:` line says so, with `adjustment_kinds` `distinct_grouped` and
   `case_function_ignored`. In `LIKE`, `%` and a leading or trailing `_` are
-  wildcards: `field LIKE '%settlement%'` asks for a field named with
-  "settlement", and `value LIKE 'settle%'` means the value contains "settle".
+  wildcards: `field LIKE '%ettlement%'` (and `spec` `{"field": {"contains":
+  "..."}}`, match `contains`) is every field whose name contains the text, any
+  case, each listed in `Resolved:`; `value LIKE 'settle%'` means the value
+  contains "settle". A field condition in an OR that matches no field leaves
+  that branch out (`adjustment_kinds` `or_branch_dropped`) instead of refusing
+  the query.
+  `field CONTAINS 'x'` matches field names too (at most 25 fields, the rest
+  counted in `Resolved:`); an entity naming no readable card is said in
+  `Applied:` (`or_branch_dropped`, `entity_unmatched`). Backticked names,
+  `when_end`, `when_date` and `valid_from` (as `when`) are accepted; a
+  subquery, `GROUP_CONCAT`, an unsupported JOIN shape, the evidence columns
+  and more than 24 conditions are refused with the call that answers each.
+  Field-name lookups across a whole project no longer run out of time.
   A `value` text condition alone runs card first; one on too many cards is
   refused at once (`invalid_arguments`) with the narrower call.
 - `POST /v1/knowledge/wiki/command` `grep` given a `documents grep` option
