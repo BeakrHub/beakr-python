@@ -11,11 +11,34 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=6ef339bca53b7013900ac455da6c5800ee589e73c883df8998dba3664fd8edf3 changelog sha256=af45a1f4d492c5a2f1daa6654a8d9b1ce939271e01d41742fc4502f99d831b29 -->
+<!-- contract-stamp: public-openapi sha256=ce31d421aba6f267cc2294a21a5d7b2463dc2a198b649d5afb6e291a31f1d902 changelog sha256=a10a254b0b9174a6f7834940fb1738dd53cf27f2c51c67586a27229d6a09ecc5 -->
 ## 1.0.0 (unreleased)
 
 The first public version.
 
+- `POST /v1/knowledge/wiki/command` `query` with an `entity_type` and a `field`
+  condition, and `rows` with `page_type` and an `attribute` or `field_id`, say
+  which cards of that type hold no value for the field, since no filter on the
+  field can list them: a line `K of N <type> cards have no <field>: <up to 10
+  titles> (open them to check).` The `query` result carries it as `missing`
+  (`field`, `page_types`, `missing`, `cards`, `titles`). Only cards you can
+  read are counted or named.
+- `POST /v1/knowledge/wiki/command` reads `rows` `value` as `query` and `rows`
+  `entity_type` as `page_type`, and a `timeline` cursor sent as `offset` as
+  `cursor`, instead of answering `400`; the reply's first line names each one
+  (for example "Read `entity_type` as page_type (the card type)."). Sent beside
+  a different value for that option, it is still refused. `query` reads an
+  `offset` beside `sql` or `spec` as the cursor that many rows in (it was
+  ignored), said in `Applied:`.
+- `POST /v1/knowledge/wiki/command` `cat` and `hover` given a reference that
+  names no page but starts with an identifier and a title separator (for
+  example `"PRJ-118 — Lease Dispute"`) open the one page that identifier
+  names, as its exact title, alias, or the start of its title, and say so on
+  the first line. When it names several pages or none, the `page_not_found`
+  error lists the titles to retry.
+- `POST /v1/knowledge/documents` `ls` with a `glob` lists the matching
+  documents, flat, with or without `recursive`. It used to list only the
+  folders holding them.
 - `POST /v1/knowledge/documents` and `POST /v1/knowledge/wiki/command` accept a
   call that sends every option, as clients using strict function calling do.
   An unset option may be sent as `""`, `0` or `false` on `documents`, and
