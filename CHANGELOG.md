@@ -7,6 +7,12 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `POST /v1/knowledge/wiki/command` `rows`: `entity` takes several titles
+  (a list, `a|b|c` or `^(a|b)$`) and reads each one's cards; `attribute` with
+  `match=exact` stays a name match under `regex`; `group_by=value` counts each
+  value of an `A; B` cell; an unknown `page_type` names the closest card types.
+  `query` reads `ON a.entity = b.entity` as `SAME_CARD(a)` and `to_title` as
+  `to`, and runs while only some cards are reindexing, saying how many.
 - `POST /v1/knowledge/wiki/command` `query` with an `entity_type` and a `field`
   condition, and `rows` with `page_type` and an `attribute` or `field_id`, say
   which cards of that type hold no value for the field: a line `K of N <type>
