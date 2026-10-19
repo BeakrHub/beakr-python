@@ -65,9 +65,9 @@ class Engine(Resource[M]):
 
         A batch already being read finishes and its proposals stay; no further
         batch starts, and the conversation's ``compound_status`` reads
-        ``cancelled``. :meth:`compound` resumes from where it stopped. A
-        conversation with nothing queued or running is refused with the error
-        code ``nothing_to_cancel``.
+        ``cancelled``. :meth:`compound` resumes from where it stopped. Returns
+        ``{conversation_id, status, pending_messages}``; ``status`` is
+        ``nothing_to_cancel`` when no compound was queued or running.
         """
         return self._run(
             ops.build_conversations_cancel_compound(body={"conversation_id": conversation_id})
