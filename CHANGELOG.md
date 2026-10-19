@@ -7,6 +7,10 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `runs.start` and `runs.answer` let the agent read Knowledge by default and take
+  `knowledge=False` to turn it off. They used to send no Knowledge toggle, which
+  the server reads as off, so an answer said Knowledge was turned off for the
+  message.
 - `files.upload_folder` starts the mirrored tree with a folder named after the
   uploaded directory (`docs/`), matching the path each file records
   (`docs/guides/a.md`); `root_folder=False` puts the directory's contents straight

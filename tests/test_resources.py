@@ -435,8 +435,27 @@ def test_run_start_sends_a_body_idempotency_key_and_project_scope(client) -> Non
     body = json.loads(route.calls.last.request.content)
     assert body["message"] == "hello"
     assert body["home_project_id"] == "p1"
-    assert body["scope"] == {"projects": [{"id": "p1"}]}
+    assert body["scope"] == {"knowledge_graph": True, "projects": [{"id": "p1"}]}
     assert len(body["idempotency_key"]) == 32
+
+
+# The server reads a run's Knowledge toggle as off unless the scope asks for it
+# (ScopeResolver: knowledge_graph defaults to False), so a run started without
+# it answered "Knowledge is turned off for this message". Knowledge is on by
+# default, with or without a project, and off only when asked.
+@respx.mock
+def test_run_start_turns_knowledge_on_by_default(client) -> None:
+    route = respx.post(f"{BASE}/v1/runs").respond(json={"run_id": "r"})
+    client.runs.start("hello")
+    assert json.loads(route.calls.last.request.content)["scope"] == {"knowledge_graph": True}
+
+
+@respx.mock
+def test_run_start_can_turn_knowledge_off(client) -> None:
+    route = respx.post(f"{BASE}/v1/runs").respond(json={"run_id": "r"})
+    client.runs.start("hello", project_id="p1", knowledge=False)
+    body = json.loads(route.calls.last.request.content)
+    assert body["scope"] == {"knowledge_graph": False, "projects": [{"id": "p1"}]}
 
 
 @respx.mock
