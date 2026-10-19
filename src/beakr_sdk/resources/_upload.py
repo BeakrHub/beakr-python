@@ -17,6 +17,7 @@ from typing import Any
 from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import collect_pages
+from beakr_sdk.errors import ValidationError
 from beakr_sdk.resources._multipart_upload import multipart_upload_flow
 
 #: Extensions the web classifies as scientific data (browsers report them as
@@ -162,21 +163,32 @@ def upload_folder_flow(
     mirror_folders: bool = True,
     include_hidden: bool = False,
     ingest: bool = True,
+    root_folder: bool = True,
 ) -> Flow:
     """Upload every file under ``root``; with ``mirror_folders``, recreate subdirectories.
 
     Each file records its path relative to ``root``'s parent (``relative_path``,
-    :func:`upload_relative_path`), whether or not its folders are mirrored.
+    :func:`upload_relative_path`), whether or not its folders are mirrored. With
+    ``root_folder`` (the default) the mirrored tree starts with a folder named after
+    ``root``, so the folders match those recorded paths; without it ``root``'s
+    contents go straight into ``folder_id``. Existing folders with the same name in
+    the same place are reused, so uploading two trees that share subfolder names,
+    or the same tree again, fills the folders that are already there.
 
     Returns ``[{"path", "artifact", "version"}]`` in upload order.
     """
     folder_ids: dict[Path, str | None] = {Path("."): folder_id}
+    children: dict[str, dict[str, str]] = {}
     results: list[dict[str, Any]] = []
     for file_path in iter_folder_files(root, include_hidden=include_hidden):
         relative_dir = file_path.parent.relative_to(root)
+        if root_folder:
+            relative_dir = Path(root.name) / relative_dir
         target_folder = folder_id
         if mirror_folders:
-            target_folder = yield from _ensure_folder(relative_dir, folder_ids, project_id)
+            target_folder = yield from _ensure_folder(
+                relative_dir, folder_ids, project_id, children
+            )
         uploaded = yield from upload_flow(
             file_path,
             project_id=project_id,
@@ -188,17 +200,56 @@ def upload_folder_flow(
     return results
 
 
-def _ensure_folder(relative_dir: Path, folder_ids: dict[Path, str | None], project_id: str) -> Flow:
+def _ensure_folder(
+    relative_dir: Path,
+    folder_ids: dict[Path, str | None],
+    project_id: str,
+    children: dict[str, dict[str, str]],
+) -> Flow:
+    """The folder for ``relative_dir``: an existing one of that name, else a new one."""
     if relative_dir in folder_ids:
         return folder_ids[relative_dir]
-    parent_id = yield from _ensure_folder(relative_dir.parent, folder_ids, project_id)
-    created = yield ops.build_folders_create_folder(
-        body=clean_body(
-            {"name": relative_dir.name, "project_id": project_id, "parent_folder_id": parent_id}
+    parent_id = yield from _ensure_folder(relative_dir.parent, folder_ids, project_id, children)
+    existing = yield from _child_folders(parent_id, project_id, children)
+    found = existing.get(relative_dir.name)
+    if found is None:
+        try:
+            created = yield ops.build_folders_create_folder(
+                body=clean_body(
+                    {
+                        "name": relative_dir.name,
+                        "project_id": project_id,
+                        "parent_folder_id": parent_id,
+                    }
+                )
+            )
+            found = str(created["id"])
+        except ValidationError:
+            # Created by someone else since the listing: use theirs.
+            children.pop(parent_id or "", None)
+            existing = yield from _child_folders(parent_id, project_id, children)
+            found = existing.get(relative_dir.name)
+            if found is None:
+                raise
+        existing[relative_dir.name] = found
+    folder_ids[relative_dir] = found
+    return found
+
+
+def _child_folders(
+    parent_id: str | None, project_id: str, children: dict[str, dict[str, str]]
+) -> Flow:
+    """``{name: id}`` of the folders directly under ``parent_id`` (the project root if None)."""
+    key = parent_id or ""
+    if key not in children:
+        call = ops.build_folders_list_folders(
+            project_id=project_id,
+            parent_folder_id=parent_id,
+            root_only=None if parent_id else True,
         )
-    )
-    folder_ids[relative_dir] = str(created["id"])
-    return folder_ids[relative_dir]
+        items = yield from collect_pages(call)
+        children[key] = {str(item["name"]): str(item["id"]) for item in items}
+    return children[key]
 
 
 #: Files one ``/v1/bulk`` batch may carry (the API's ``ingress.bulk_upload.max_files``).

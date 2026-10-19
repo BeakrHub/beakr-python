@@ -7,6 +7,13 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `files.upload_folder` starts the mirrored tree with a folder named after the
+  uploaded directory (`docs/`), matching the path each file records
+  (`docs/guides/a.md`); `root_folder=False` puts the directory's contents straight
+  into `folder_id` as before. Existing folders with the same name in the same
+  place are reused instead of failing, so two trees that share subfolder names
+  (two deal matters that both have `Closing/`), or the same tree uploaded again,
+  no longer stop with a 400 halfway through and leave a partial upload.
 - `GET`, `PUT` and `PATCH /v1/projects/{project_id}/knowledge-profile`: read
   and set a project's Knowledge profile, the description, goals, focus areas,
   people, organizations, topics, entity types and extraction guidance that
