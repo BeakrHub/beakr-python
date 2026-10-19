@@ -58,3 +58,17 @@ class Engine(Resource[M]):
         return self._run(
             ops.build_conversations_compound(body={"conversation_id": conversation_id})
         )
+
+    @returns(ops.build_conversations_cancel_compound)
+    def cancel_compound(self, conversation_id: str) -> Any:
+        """Stop a queued or running compound of an imported conversation.
+
+        A batch already being read finishes and its proposals stay; no further
+        batch starts, and the conversation's ``compound_status`` reads
+        ``cancelled``. :meth:`compound` resumes from where it stopped. A
+        conversation with nothing queued or running is refused with the error
+        code ``nothing_to_cancel``.
+        """
+        return self._run(
+            ops.build_conversations_cancel_compound(body={"conversation_id": conversation_id})
+        )

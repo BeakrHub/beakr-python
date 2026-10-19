@@ -391,6 +391,14 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         {},
         {"conversation_id": "cv1"},
     ),
+    (
+        "cancel compound",
+        lambda c: c.engine.cancel_compound("cv1"),
+        "POST",
+        "/v1/compound/cancel",
+        {},
+        {"conversation_id": "cv1"},
+    ),
     ("run get", lambda c: c.runs.get("r1"), "GET", "/v1/runs/r1", {}, None),
     (
         "threads",

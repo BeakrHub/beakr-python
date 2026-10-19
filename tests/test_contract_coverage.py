@@ -60,6 +60,7 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/projects/{}/threads", lambda c: c.threads.shared()),
     ("GET /v1/jobs/{}", lambda c: c.jobs.get("j1")),
     ("POST /v1/compound", lambda c: c.engine.compound("cv1")),
+    ("POST /v1/compound/cancel", lambda c: c.engine.cancel_compound("cv1")),
     ("POST /v1/context", lambda c: c.engine.context(project_id="p1")),
     ("GET /v1/conversations", lambda c: c.conversations.list()),
     (
