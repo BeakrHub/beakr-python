@@ -55,6 +55,29 @@ link = beakr.interviews.create_link("Assay handover", questions=["Controls?"])
 print(link["url"])                                           # shown once; send it
 ```
 
+### Tell Knowledge what a project is about
+
+A project's Knowledge profile steers how Beakr compiles its files: what the
+project is for, the people, organizations and topics that matter, and the kinds
+of things to build pages for. Set it before or after uploading; Knowledge reads
+it when it next compiles files. Only the project's owners may set it.
+
+```python
+beakr.projects.set_knowledge_profile(
+    project_id,
+    description="Batch records, deviations and CAPAs for the Basel site",
+    goals=["Track deviations to closure"],
+    entity_types=["batch", "deviation", "capa", "supplier"],
+    core_people=[{"name": "Priya Natarajan", "role": "Batch owner"}],
+    extraction_guidance="Record each deviation's root cause and its CAPA.",
+)
+beakr.projects.update_knowledge_profile(project_id, focus_areas=["pH excursions"])
+print(beakr.projects.knowledge_profile(project_id)["entity_types"])
+```
+
+`knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
+while the project has none.
+
 ### Know when Knowledge is ready
 
 Uploaded files reach a project's Knowledge in the background after indexing.
