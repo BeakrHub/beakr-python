@@ -49,7 +49,17 @@ CONVERSATION_CLIENTS = ("claude-code", "codex", "chatgpt", "chatgpt-export", "ge
 #: ``compound_status`` values. ``partial``, ``skipped`` and ``failed`` keep the
 #: messages that were not processed (and their text), so compounding again
 #: retries them; ``last_compound_result`` carries the outcome and its reason.
-COMPOUND_STATUSES = ("pending", "queued", "running", "done", "partial", "skipped", "failed")
+#: ``cancelled`` (``engine.cancel_compound``) keeps them too; compounding again resumes.
+COMPOUND_STATUSES = (
+    "pending",
+    "queued",
+    "running",
+    "done",
+    "partial",
+    "skipped",
+    "failed",
+    "cancelled",
+)
 
 
 def expected_base_index(exc: BeakrError) -> int | None:
