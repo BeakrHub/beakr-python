@@ -19,6 +19,12 @@ Each release lists the public API changes it supports, taken from the API change
   `knowledge=False` to turn it off. They used to send no Knowledge toggle, which
   the server reads as off, so an answer said Knowledge was turned off for the
   message.
+- `meta.capabilities()` reads which documented operations this server serves
+  from its own `GET /v1/public/openapi.json`, once per base URL (cached for
+  five minutes), and `Capabilities.serves(method, path)` answers for one
+  operation. A self-hosted installation serves part of the contract and
+  answers a bare 404 for the rest; a server without the document is assumed
+  to serve everything.
 - `files.upload_folder` starts the mirrored tree with a folder named after the
   uploaded directory (`docs/`), matching the path each file records
   (`docs/guides/a.md`); `root_folder=False` puts the directory's contents straight
