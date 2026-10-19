@@ -198,6 +198,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.projects.knowledge_failures("p1"),
     ),
     ("POST /v1/projects/{}/knowledge/retry-failed", lambda c: c.projects.retry_failed("p1")),
+    ("GET /v1/projects/{}/knowledge-profile", lambda c: c.projects.knowledge_profile("p1")),
+    (
+        "PUT /v1/projects/{}/knowledge-profile",
+        lambda c: c.projects.set_knowledge_profile("p1", name="Basel"),
+    ),
+    (
+        "PATCH /v1/projects/{}/knowledge-profile",
+        lambda c: c.projects.update_knowledge_profile("p1", name="Basel"),
+    ),
     (
         "DELETE /v1/projects/{}/pending-invitations/{}",
         lambda c: c.projects.revoke_invitation("p1", "i1"),
