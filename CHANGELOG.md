@@ -7,6 +7,24 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `POST /v1/compound/cancel`: stop the queued or running compound of an
+  imported conversation (`conversations:write`). A batch already being read
+  finishes and its proposals stay; no further batch starts, and the
+  conversation's `compound_status` reads `cancelled`. Answers
+  `nothing_to_cancel` when no compound is queued or running. `POST /v1/compound`
+  resumes from where it stopped.
+- `engine.cancel_compound(conversation_id)` stops a compound over this route;
+  `engine.compound` resumes it.
+- `runs.start` and `runs.answer` let the agent read Knowledge by default and take
+  `knowledge=False` to turn it off. They used to send no Knowledge toggle, which
+  the server reads as off, so an answer said Knowledge was turned off for the
+  message.
+- `meta.capabilities()` reads which documented operations this server serves
+  from its own `GET /v1/public/openapi.json`, once per base URL (cached for
+  five minutes), and `Capabilities.serves(method, path)` answers for one
+  operation. A self-hosted installation serves part of the contract and
+  answers a bare 404 for the rest; a server without the document is assumed
+  to serve everything.
 - `files.upload_folder` starts the mirrored tree with a folder named after the
   uploaded directory (`docs/`), matching the path each file records
   (`docs/guides/a.md`); `root_folder=False` puts the directory's contents straight
