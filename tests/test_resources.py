@@ -124,6 +124,51 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         },
     ),
     (
+        "rows with the map-walk arguments",
+        lambda c: c.knowledge.rows(
+            "connections",
+            page_type="matter",
+            entity="Stripe",
+            to="Acme",
+            connected_to="Acme",
+            group_by="relation",
+            regex=True,
+            view="values",
+            match="similar",
+            scope="Platform",
+        ),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "rows",
+            "table": "connections",
+            "page_type": "matter",
+            "entity": "Stripe",
+            "to": "Acme",
+            "connected_to": "Acme",
+            "group_by": "relation",
+            "regex": True,
+            "view": "values",
+            "match": "similar",
+            "scope": "Platform",
+        },
+    ),
+    (
+        "rows as of a date and by field id",
+        lambda c: c.knowledge.rows(as_of="2026-01-31", field_id="facts:abc", after_card="c1"),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "rows",
+            "table": "facts",
+            "as_of": "2026-01-31",
+            "field_id": "facts:abc",
+            "after_card": "c1",
+        },
+    ),
+    (
         "timeline",
         lambda c: c.knowledge.timeline("launch", start_date="2026-01-01"),
         "POST",
@@ -222,12 +267,82 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         None,
     ),
     (
+        "query sql",
+        lambda c: c.knowledge.query(
+            sql="SELECT value, COUNT(*) AS n FROM facts WHERE field = 'Status' GROUP BY value",
+            cursor="abc",
+            scope="Contracts",
+        ),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "query",
+            "sql": "SELECT value, COUNT(*) AS n FROM facts WHERE field = 'Status' GROUP BY value",
+            "cursor": "abc",
+            "scope": "Contracts",
+        },
+    ),
+    (
+        "query",
+        lambda c: c.knowledge.query(
+            {
+                "from": {"table": "facts", "as": "f"},
+                "where": {
+                    "and": [
+                        {"entity_type": "agreement"},
+                        {"field": "governing law", "match": "similar"},
+                        {"not": {"value": "Delaware", "op": "contains"}},
+                    ]
+                },
+                "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
+                "group_by": ["value"],
+                "aggregate": [{"fn": "count"}, {"fn": "count_distinct", "of": "entity"}],
+                "order_by": [{"by": "count", "dir": "desc"}],
+                "limit": 20,
+            },
+            scope="Contracts",
+        ),
+        "POST",
+        "/v1/knowledge/wiki/command",
+        {},
+        {
+            "command": "query",
+            "spec": {
+                "from": {"table": "facts", "as": "f"},
+                "where": {
+                    "and": [
+                        {"entity_type": "agreement"},
+                        {"field": "governing law", "match": "similar"},
+                        {"not": {"value": "Delaware", "op": "contains"}},
+                    ]
+                },
+                "join": [{"table": "connections", "as": "c", "on": "same_card", "with": "f"}],
+                "group_by": ["value"],
+                "aggregate": [{"fn": "count"}, {"fn": "count_distinct", "of": "entity"}],
+                "order_by": [{"by": "count", "dir": "desc"}],
+                "limit": 20,
+            },
+            "scope": "Contracts",
+        },
+    ),
+    (
         "accept",
         lambda c: c.knowledge.proposals.accept("x1"),
         "POST",
         "/v1/knowledge/wiki/proposals/x1/accept",
         {},
         None,
+    ),
+    (
+        # The hash of the read that was reviewed, sent unchanged; the helper never
+        # fetches the proposal to fill it in (security review, 2026-10-16).
+        "accept_reviewed",
+        lambda c: c.knowledge.proposals.accept("x1", reviewed_hash="ab" * 32),
+        "POST",
+        "/v1/knowledge/wiki/proposals/x1/accept",
+        {},
+        {"reviewed_hash": "ab" * 32},
     ),
     (
         "research",
@@ -347,3 +462,44 @@ def test_knowledge_check_false_returns_the_refusal(client) -> None:
     )
     result = client.knowledge.command("cat", page="x", check=False)
     assert result["outcome"]["status"] == "error"
+
+
+@respx.mock
+def test_proposal_accept_sends_the_reviewed_hash_as_given_and_never_reads_first(client) -> None:
+    # ROOT CAUSE (security review, 2026-10-16): an accept that reads the proposal
+    # and echoes that read's content_hash binds to whatever the proposal is at
+    # accept time, so a proposal changed after review is accepted anyway. The
+    # helper sends only the hash it is given, and none when it is given none.
+    read = respx.get(f"{BASE}/v1/knowledge/wiki/proposals/x1").respond(
+        200, json={"id": "x1", "content_hash": "cd" * 32}
+    )
+    accept = respx.post(f"{BASE}/v1/knowledge/wiki/proposals/x1/accept").respond(
+        200, json={"status": "accepted", "proposal_id": "x1"}
+    )
+
+    client.knowledge.proposals.accept("x1", reviewed_hash="ab" * 32)
+    client.knowledge.proposals.accept("x1")
+
+    assert not read.called
+    bodies = [call.request.content for call in accept.calls]
+    assert json.loads(bodies[0]) == {"reviewed_hash": "ab" * 32}
+    assert bodies[1] == b""
+
+
+def test_a_count_aggregate_needs_no_of() -> None:
+    # The engine counts rows for "count" and refuses "of" on it, so the typed
+    # shape must not require "of" (it did, which made a valid count spec fail
+    # type-checking and the type-checked one fail on the engine).
+    from beakr_sdk.query_spec import Aggregate
+
+    assert Aggregate.__required_keys__ == frozenset({"fn"})
+    assert Aggregate.__optional_keys__ == frozenset({"of"})
+
+
+def test_query_takes_sql_or_spec_not_both(client) -> None:
+    import pytest
+
+    with pytest.raises(ValueError, match="sql or spec"):
+        client.knowledge.query({"from": "facts"}, sql="SELECT * FROM facts")
+    with pytest.raises(ValueError, match="sql or spec"):
+        client.knowledge.query()

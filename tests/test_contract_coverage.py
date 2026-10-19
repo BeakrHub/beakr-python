@@ -48,6 +48,7 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("PATCH /v1/artifacts/{}", lambda c: c.files.update("a1", title="New")),
     ("GET /v1/artifacts/{}/content", lambda c: c.files.content("a1")),
     ("POST /v1/artifacts/read", lambda c: c.files.read("deals/memo.pdf", unit="p. 7")),
+    ("POST /v1/artifacts/download-url", lambda c: c.files.download_link("beakr-source:v1:x")),
     ("POST /v1/artifacts/{}/knowledge", lambda c: c.files.send_to_knowledge("a1")),
     ("POST /v1/artifacts/{}/move", lambda c: c.files.move("a1", "p2")),
     ("POST /v1/runs", lambda c: c.runs.start("hi", project_id="p1")),
@@ -197,6 +198,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.projects.knowledge_failures("p1"),
     ),
     ("POST /v1/projects/{}/knowledge/retry-failed", lambda c: c.projects.retry_failed("p1")),
+    ("GET /v1/projects/{}/knowledge-profile", lambda c: c.projects.knowledge_profile("p1")),
+    (
+        "PUT /v1/projects/{}/knowledge-profile",
+        lambda c: c.projects.set_knowledge_profile("p1", name="Basel"),
+    ),
+    (
+        "PATCH /v1/projects/{}/knowledge-profile",
+        lambda c: c.projects.update_knowledge_profile("p1", name="Basel"),
+    ),
     (
         "DELETE /v1/projects/{}/pending-invitations/{}",
         lambda c: c.projects.revoke_invitation("p1", "i1"),

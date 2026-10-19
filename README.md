@@ -26,6 +26,8 @@ beakr.jobs.wait(batch)                                               # until it 
 
 hits = beakr.knowledge.sections("launch date", scope="Research")
 card = beakr.knowledge.cat("Launch Plan", scope="Research")
+found = beakr.knowledge.documents_search("who covers losses from defects", project_id="Research")
+beakr.files.download_reference(found["results"][0]["source_ref"], "downloads/")
 facts = beakr.knowledge.rows(table="facts", entity="Stripe", current_only=True)
 beakr.knowledge.add_finding(
     "Stripe", date="2026-10-01", kind="decision", text="Stay on Stripe through 2027",
@@ -52,6 +54,29 @@ found = beakr.integrations.call_tool("slack_search", {"query": "launch date"})
 link = beakr.interviews.create_link("Assay handover", questions=["Controls?"])
 print(link["url"])                                           # shown once; send it
 ```
+
+### Tell Knowledge what a project is about
+
+A project's Knowledge profile steers how Beakr compiles its files: what the
+project is for, the people, organizations and topics that matter, and the kinds
+of things to build pages for. Set it before or after uploading; Knowledge reads
+it when it next compiles files. Only the project's owners may set it.
+
+```python
+beakr.projects.set_knowledge_profile(
+    project_id,
+    description="Batch records, deviations and CAPAs for the Basel site",
+    goals=["Track deviations to closure"],
+    entity_types=["batch", "deviation", "capa", "supplier"],
+    core_people=[{"name": "Priya Natarajan", "role": "Batch owner"}],
+    extraction_guidance="Record each deviation's root cause and its CAPA.",
+)
+beakr.projects.update_knowledge_profile(project_id, focus_areas=["pH excursions"])
+print(beakr.projects.knowledge_profile(project_id)["entity_types"])
+```
+
+`knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
+while the project has none.
 
 ### Know when Knowledge is ready
 

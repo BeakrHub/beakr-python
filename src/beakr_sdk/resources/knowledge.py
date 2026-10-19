@@ -30,6 +30,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.errors import KnowledgeCommandError
+from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources._base import Resource, as_list
 from beakr_sdk.resources.knowledge_pages import KnowledgePages
 
@@ -89,9 +90,19 @@ class Proposals(Resource[M]):
         return self._run(ops.build_knowledge_get_proposal(proposal_id))
 
     @returns(ops.build_knowledge_accept_proposal)
-    def accept(self, proposal_id: str) -> Any:
-        """Apply a proposal. Returns ``{status, proposal_id, page_ids, ...}``."""
-        return self._run(ops.build_knowledge_accept_proposal(proposal_id))
+    def accept(self, proposal_id: str, *, reviewed_hash: str | None = None) -> Any:
+        """Apply a proposal. Returns ``{status, proposal_id, page_ids, ...}``.
+
+        ``reviewed_hash`` is the ``content_hash`` of the :meth:`show` you reviewed,
+        passed unchanged: a proposal that changed since is refused (409
+        ``proposal_changed``) and nothing is applied, and a proposal that changes a
+        card's table rows can require it (422 ``review_required``). This method
+        never reads the proposal to fill it in, because a hash from a read made at
+        accept time would bind the accept to whatever the proposal is then rather
+        than to what was reviewed.
+        """
+        body = {"reviewed_hash": reviewed_hash} if reviewed_hash is not None else None
+        return self._run(ops.build_knowledge_accept_proposal(proposal_id, body=body))
 
     @returns(ops.build_knowledge_dismiss_proposal)
     def dismiss(self, proposal_id: str) -> Any:
@@ -237,6 +248,40 @@ class Knowledge(Resource[M]):
             scope=scope,
         )
 
+    def query(
+        self,
+        spec: QuerySpec | None = None,
+        *,
+        sql: str | None = None,
+        cursor: str | None = None,
+        scope: str | None = None,
+    ) -> Any:
+        """Ask a question of every map card's rows (the ``query`` command), as SQL or a spec.
+
+        ``sql`` is one SELECT, for example ``SELECT value, COUNT(DISTINCT entity) AS
+        cards FROM facts AS OF CURRENT_DATE WHERE entity_type = 'matter' AND field =
+        'Current status' GROUP BY value ORDER BY cards DESC``. The engine parses it
+        into a spec and never runs it as SQL: ``FROM`` facts, connections or
+        findings, up to two ``JOIN`` s on ``SAME_CARD(a)`` or ``TARGET_CARD(a)``,
+        ``WHERE`` with AND/OR/NOT, ``AS OF`` a day, ``GROUP BY``, ``COUNT``, ``MIN``,
+        ``MAX``, ``SUM``, ``AVG``, ``ORDER BY`` and ``LIMIT``. ``spec`` is the same
+        query as JSON (see :mod:`beakr_sdk.query_spec`). Send one of them. Only
+        cards you can read are queried; ``scope`` narrows them to one project
+        (name or id); ``cursor`` continues a previous answer. Where enabled for the
+        organization.
+
+        The answer's text opens with what the query was understood as (for ``sql``
+        the spec it was translated to, how each name resolved, what was defaulted
+        or applied), then the total and a table; its ``query`` holds the same as
+        data (``spec``, ``columns``, ``rows``, ``total``, ``next_cursor``). A query
+        the engine cannot run raises :class:`KnowledgeCommandError`
+        (``invalid_arguments``).
+        """
+        if (spec is None) == (sql is None):
+            raise ValueError("query takes sql or spec, not both and not neither")
+        arguments: dict[str, Any] = {"sql": sql} if sql is not None else {"spec": dict(spec)}
+        return self.command("query", scope=scope, cursor=cursor, **arguments)
+
     def rows(
         self,
         table: str = "facts",
@@ -244,9 +289,18 @@ class Knowledge(Resource[M]):
         entity: str | None = None,
         attribute: str | None = None,
         query: str | None = None,
+        to: str | None = None,
+        connected_to: str | None = None,
+        as_of: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
         current_only: bool | None = None,
+        group_by: str | None = None,
+        regex: bool | None = None,
+        view: str | None = None,
+        field_id: str | None = None,
+        match: str | None = None,
+        after_card: str | None = None,
         order_by: str | None = None,
         descending: bool | None = None,
         page_type: str | None = None,
@@ -255,16 +309,38 @@ class Knowledge(Resource[M]):
         include_evidence: bool | None = None,
         scope: str | None = None,
     ) -> Any:
-        """Every map card's ``facts``, ``connections`` or ``findings`` rows as one table."""
+        """Every map card's ``facts``, ``connections`` or ``findings`` rows as one table.
+
+        ``table`` is ``facts``, ``connections`` or ``findings``; ``page_type`` and
+        ``entity`` narrow the cards. ``to`` keeps Connections pointing at a page;
+        ``connected_to`` keeps cards linked to a page in either direction; ``as_of``
+        (Facts, a day such as ``2026-01-31``) reads each card's value on that day.
+        ``group_by`` answers counts and totals per group instead of rows; ``regex``
+        reads ``attribute``, ``to`` and ``query`` as regular expressions; ``view``
+        is ``values`` (default), ``fields``, ``groups`` or ``conflicts``;
+        ``field_id`` selects one field as the field inventory names it; ``match``
+        is ``meaning`` (the default), ``similar`` (words only) or ``exact``, for how
+        ``attribute`` finds a field and ``query`` matches values; ``after_card``
+        continues a card scan that stopped at its cap.
+        """
         return self.command(
             "rows",
             table=table,
             entity=entity,
             attribute=attribute,
             query=query,
+            to=to,
+            connected_to=connected_to,
+            as_of=as_of,
             start_date=start_date,
             end_date=end_date,
             current_only=current_only,
+            group_by=group_by,
+            regex=regex,
+            view=view,
+            field_id=field_id,
+            match=match,
+            after_card=after_card,
             order_by=order_by,
             descending=descending,
             page_type=page_type,
@@ -303,9 +379,10 @@ class Knowledge(Resource[M]):
     def documents(self, command: str, *, project_id: str | None = None, **arguments: Any) -> Any:
         """Search/read/list original indexed documents; inspect scan notices before counting.
 
-        ``command`` is grep, read or ls. read accepts document and explicit
-        start_line/end_line. Feature-gated on the server, with the caller's
-        project permissions enforced identically to REST and MCP.
+        ``command`` is grep, read, ls or search. read accepts document and explicit
+        start_line/end_line. ``project_id`` is a project id or name; without it a
+        command covers everything you can read. Feature-gated on the server, with
+        the caller's project permissions enforced identically to REST and MCP.
         """
         return self._run(
             ops.build_knowledge_documents(
@@ -318,6 +395,48 @@ class Knowledge(Resource[M]):
                 )
             )
         )
+
+    def documents_search(
+        self,
+        query: str,
+        *,
+        limit: int | None = None,
+        offset: int | None = None,
+        passages: int | None = None,
+        path: str | None = None,
+        glob: str | list[str] | None = None,
+        type: str | list[str] | None = None,
+        document: str | None = None,
+        project_id: str | None = None,
+    ) -> Any:
+        """Passages of the original documents ranked by meaning, grouped by document.
+
+        For when you do not know the words a document uses; ``grep`` finds and
+        counts every literal mention. Returns ``{content, sources, results}``:
+        ``results`` is one source record per matching document, best first, with
+        ``source_ref``, ``location`` (``display_path``, ``file_id``,
+        ``version_id``), ``match`` (strong, moderate or weak), ``score`` and its
+        best ``passages`` (``source_ref``, ``unit_locator``, ``line_start``/
+        ``line_end``, ``excerpt``, ``match``, ``score``). ``limit`` documents per
+        page (default 8, max 25) from ``offset``; ``passages`` per document
+        (default 2, max 5). Download a result's file with
+        ``files.download_link(record["source_ref"])``.
+        """
+        arguments = {
+            key: value
+            for key, value in {
+                "query": query,
+                "limit": limit,
+                "offset": offset,
+                "passages": passages,
+                "path": path,
+                "glob": glob,
+                "type": type,
+                "document": document,
+            }.items()
+            if value is not None
+        }
+        return self.documents("search", project_id=project_id, **arguments)
 
     def research(self, query: str, *, project_id: str | None = None, quick: bool = False) -> Any:
         """A researched, cited answer across the wiki, documents and connected services.

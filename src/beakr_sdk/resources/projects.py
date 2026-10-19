@@ -10,6 +10,18 @@ Example::
     beakr.projects.archive(project["id"])
     beakr.projects.delete(project["id"])   # permanent: there is no trash
 
+Knowledge profile (what Knowledge should understand about the project)::
+
+    beakr.projects.set_knowledge_profile(
+        project_id,
+        description="Batch records and deviations for the Basel site",
+        goals=["Track deviations to closure"],
+        entity_types=["batch", "deviation", "capa"],
+        core_people=[{"name": "Priya Natarajan", "role": "Batch owner"}],
+    )
+    beakr.projects.update_knowledge_profile(project_id, entity_types=["batch", "deviation"])
+    profile = beakr.projects.knowledge_profile(project_id)
+
 Knowledge readiness::
 
     status = beakr.projects.wait_until_ready(project_id, timeout=900)
@@ -31,6 +43,21 @@ from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
 from beakr_sdk.resources._base import Resource
 from beakr_sdk.resources.knowledge_readiness import wait_until_ready_flow
+
+_PROFILE_FIELDS = frozenset(
+    {
+        "name",
+        "description",
+        "industry",
+        "goals",
+        "focus_areas",
+        "core_people",
+        "core_organizations",
+        "core_topics",
+        "entity_types",
+        "extraction_guidance",
+    }
+)
 
 
 class Projects(Resource[M]):
@@ -192,3 +219,66 @@ class Projects(Resource[M]):
         """
         body = None if artifact_ids is None else {"artifact_ids": list(artifact_ids)}
         return self._run(ops.build_projects_retry_failed_knowledge(project_id, body=body))
+
+    # --- Knowledge profile --------------------------------------------------
+
+    @returns(ops.build_projects_get_project_knowledge_profile)
+    def knowledge_profile(self, project_id: str) -> Any:
+        """The project's Knowledge profile.
+
+        Raises ``NotFoundError`` with ``code == "knowledge_profile_not_found"``
+        when the project has none yet (set one with ``set_knowledge_profile``).
+        Project members read it; a viewer is refused.
+        """
+        return self._run(ops.build_projects_get_project_knowledge_profile(project_id))
+
+    def set_knowledge_profile(
+        self,
+        project_id: str,
+        *,
+        name: str | None = None,
+        description: str | None = None,
+        industry: str | None = None,
+        goals: builtins.list[str] | None = None,
+        focus_areas: builtins.list[str] | None = None,
+        core_people: builtins.list[dict[str, Any]] | None = None,
+        core_organizations: builtins.list[dict[str, Any]] | None = None,
+        core_topics: builtins.list[dict[str, Any]] | None = None,
+        entity_types: builtins.list[str] | None = None,
+        extraction_guidance: str | None = None,
+    ) -> Any:
+        """Set the whole Knowledge profile, creating it if the project has none.
+
+        Fields left out are set to their empty value. People are ``{"name", "role",
+        "relevance"}``, organizations ``{"name", "type", "relevance"}``, topics
+        ``{"name", "relevance"}``. Only the project's owners may set it; Knowledge
+        reads it when it next compiles files.
+        """
+        body = clean_body(
+            {
+                "name": name,
+                "description": description,
+                "industry": industry,
+                "goals": goals,
+                "focus_areas": focus_areas,
+                "core_people": core_people,
+                "core_organizations": core_organizations,
+                "core_topics": core_topics,
+                "entity_types": entity_types,
+                "extraction_guidance": extraction_guidance,
+            }
+        )
+        return self._run(ops.build_projects_put_project_knowledge_profile(project_id, body=body))
+
+    def update_knowledge_profile(self, project_id: str, **fields: Any) -> Any:
+        """Change the fields given; the rest are kept. A list given replaces that list.
+
+        Takes the same fields as ``set_knowledge_profile``. Raises ``NotFoundError``
+        (``knowledge_profile_not_found``) when the project has no profile yet.
+        """
+        unknown = set(fields) - _PROFILE_FIELDS
+        if unknown:
+            raise TypeError(f"unknown Knowledge profile field(s): {', '.join(sorted(unknown))}")
+        return self._run(
+            ops.build_projects_patch_project_knowledge_profile(project_id, body=fields)  # type: ignore[arg-type]
+        )

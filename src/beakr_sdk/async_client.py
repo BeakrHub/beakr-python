@@ -159,7 +159,6 @@ class AsyncBeakr(BaseClient):
         #: Every public operation, one typed method each (generated from the contract).
         self.api = AsyncBeakrApi(self)
 
-
     async def close(self) -> None:
         if self._owns_http:
             await self._http.aclose()
