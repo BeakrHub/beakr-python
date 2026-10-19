@@ -161,6 +161,25 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
   with no stability promise; the Beakr CLI keeps its own private client for the
   few it calls.
 
+### What this installation serves: `beakr.meta.capabilities()`
+
+A self-hosted Beakr installation serves only part of the documented contract
+(no organization administration, external users, end-user tokens, service
+accounts or integrations) and answers a bare 404 for the rest. Each server
+lists what it serves in its own `GET /v1/public/openapi.json`;
+`capabilities()` reads it once per base URL (cached for five minutes) so a
+client can hide what is not there instead of failing on it:
+
+```python
+caps = beakr.meta.capabilities()
+if not caps.serves("GET", "/v1/integrations"):
+    print("This Beakr installation does not provide integrations")
+```
+
+`serves` takes a concrete path or a contract template. A server that publishes
+no document is assumed to serve everything, and a route outside the documented
+contract is always assumed served: the document cannot speak for it.
+
 ### The generated, typed layer: `beakr.api`
 
 Every documented operation also has one generated, typed method, grouped by
