@@ -257,13 +257,18 @@ class Files(Resource[M]):
         mirror_folders: bool = True,
         include_hidden: bool = False,
         ingest: bool = True,
+        root_folder: bool = True,
     ) -> Any:
         """Upload a directory tree; subdirectories become folders unless ``mirror_folders``
         is False.
 
         Either way each file records its path from the directory's parent
         (``docs/guides/a.md`` for ``guides/a.md`` under ``docs/``), which Knowledge
-        reads name it by and ``read`` accepts.
+        reads name it by and ``read`` accepts. With ``root_folder`` (the default) the
+        folders start with one named after the directory (``docs/``), matching those
+        paths; False puts the directory's contents straight into ``folder_id``.
+        Folders that already exist under the same name are reused, so uploading two
+        trees with shared subfolder names, or the same tree again, does not fail.
         """
         root = Path(path)
         if not root.is_dir():
@@ -276,6 +281,7 @@ class Files(Resource[M]):
                 mirror_folders=mirror_folders,
                 include_hidden=include_hidden,
                 ingest=ingest,
+                root_folder=root_folder,
             )
         )
 
