@@ -89,6 +89,19 @@ async def test_answer_on_the_async_client(async_client) -> None:
     assert answer["text"] == "Leases last 300s.[1]"
 
 
+# runs.answer starts its run through runs.start, so it carries the same
+# Knowledge toggle: on by default (the server reads a missing toggle as off),
+# off only when asked.
+@respx.mock
+def test_answer_passes_the_knowledge_toggle_to_its_run(client) -> None:
+    _mock_run()
+    client.runs.answer("How long is a lease?")
+    client.runs.answer("How long is a lease?", knowledge=False)
+    starts = [c for c in respx.calls if c.request.method == "POST"]
+    scopes = [json.loads(c.request.content)["scope"] for c in starts]
+    assert scopes == [{"knowledge_graph": True}, {"knowledge_graph": False}]
+
+
 @respx.mock
 def test_answer_is_the_engines_rendering_with_the_streamed_file_id(client) -> None:
     # GET /v1/runs `answer` is the single source of truth for a completed run;
