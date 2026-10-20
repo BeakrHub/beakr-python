@@ -73,6 +73,9 @@ class Beakr(BaseClient):
         agent: Sent as ``X-Beakr-Agent`` to attribute writes, e.g. ``"my-bot"``.
         run: Sent as ``X-Beakr-Run``: groups this client's Knowledge writes into one
             run that ``knowledge.undo_run(run)`` can take back together.
+        session: Sent as ``X-Beakr-Session``: the agent session behind the writes
+            (a conversation or thread id), shown on their provenance. Defaults to
+            ``BEAKR_SESSION``; ``""`` sends none.
         timeout: Per-request timeout in seconds.
         max_retries: Retries on 429/502/503/504 and connection errors.
     """
