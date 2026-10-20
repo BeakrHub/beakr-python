@@ -7,6 +7,7 @@ from typing import Any
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
+from beakr_sdk.capabilities import capabilities_flow
 from beakr_sdk.resources._base import Resource
 
 
@@ -29,3 +30,14 @@ class Meta(Resource[M]):
     def openapi(self) -> Any:
         """The public OpenAPI document (every operation a key or token may call)."""
         return self._run(ops.build_openapi_public_openapi())
+
+    def capabilities(self, *, refresh: bool = False) -> Any:
+        """Which documented operations this server serves, as a ``Capabilities``.
+
+        Read from the server's own OpenAPI document, fetched at most once per
+        base URL every few minutes (``refresh=True`` reads it again now). A
+        self-hosted installation serves less than the hosted service:
+        ``beakr.meta.capabilities().serves("GET", "/v1/integrations")`` says
+        whether this one has integrations before a call answers 404.
+        """
+        return self._drive(capabilities_flow(self._client.base_url, refresh=refresh))

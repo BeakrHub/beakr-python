@@ -85,9 +85,14 @@ class Runs(Resource[M]):
         model: str | None = None,
         timezone: str | None = None,
         files: list[str] | None = None,
+        knowledge: bool = True,
         idempotency_key: str | None = None,
     ) -> Any:
         """Start a run (a new thread unless ``thread_id``). Returns ``{run_id, thread_id, ...}``.
+
+        ``knowledge`` lets the agent read the organization's Knowledge (its
+        wiki) while it answers. The server treats a run that does not ask for it
+        as one with Knowledge turned off, so it is on unless ``knowledge=False``.
 
         ``files`` are ids of files you can read (``files.upload(...)["artifact"]["id"]``),
         given to the agent the way files attached in Beakr's chat are; the
@@ -96,13 +101,16 @@ class Runs(Resource[M]):
         The run route deduplicates on the body's ``idempotency_key``; one is
         generated when omitted, and kept across retries.
         """
+        scope: dict[str, Any] = {"knowledge_graph": knowledge}
+        if project_id:
+            scope["projects"] = [{"id": project_id}]
         body = clean_body(
             {
                 "idempotency_key": idempotency_key or uuid.uuid4().hex,
                 "message": message,
                 "thread_id": thread_id,
                 "home_project_id": project_id,
-                "scope": {"projects": [{"id": project_id}]} if project_id else None,
+                "scope": scope,
                 "mode": mode,
                 "model": model,
                 "timezone": timezone,
@@ -139,6 +147,7 @@ class Runs(Resource[M]):
         thread_id: str | None = None,
         mode: str | None = None,
         files: list[str] | None = None,
+        knowledge: bool = True,
     ) -> Any:
         """Ask the agent and wait for its answer: ``{text, sources, run_id}``.
 
@@ -151,7 +160,13 @@ class Runs(Resource[M]):
         (with the run's ``question``) when the agent stopped to ask the person
         something instead of answering. An awaitable on ``AsyncBeakr``.
         """
-        start = {"project_id": project_id, "thread_id": thread_id, "mode": mode, "files": files}
+        start = {
+            "project_id": project_id,
+            "thread_id": thread_id,
+            "mode": mode,
+            "files": files,
+            "knowledge": knowledge,
+        }
         if inspect.isasyncgenfunction(self._client._stream_sse):  # type: ignore[attr-defined]
             return self._answer_async(question, start)
         run = self.start(question, **start)
