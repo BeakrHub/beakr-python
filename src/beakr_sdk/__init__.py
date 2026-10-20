@@ -22,6 +22,7 @@ operation. Modules whose names start with an underscore are private.
 from beakr_sdk._version import __version__
 from beakr_sdk.answers import RunFailedError, RunNeedsInputError
 from beakr_sdk.async_client import AsyncBeakr
+from beakr_sdk.capabilities import Capabilities
 from beakr_sdk.client import Beakr
 from beakr_sdk.errors import (
     APIConnectionError,
@@ -45,6 +46,7 @@ __all__ = [
     "Beakr",
     "BeakrError",
     "BeakrUploadInterrupted",
+    "Capabilities",
     "ConflictError",
     "KnowledgeCommandError",
     "NotFoundError",
