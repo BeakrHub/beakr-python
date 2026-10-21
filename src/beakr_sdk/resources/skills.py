@@ -189,7 +189,8 @@ class Skills(Resource[M]):
 
         Each filter takes one value or several: ``owner=["me", "org"]``.
         ``installed=False`` lists the skills you could add to your library;
-        ``include_content=True`` adds each skill's ``files``.
+        ``include_content=True`` adds each skill's ``files`` (the server then
+        pages 25 skills at a time). Retired skills are not listed.
         """
         return self._list_all(
             ops.build_skills_list_skills(
@@ -258,8 +259,9 @@ class Skills(Resource[M]):
         """Create a skill of yours from its files (``{path: text}``, with ``SKILL.md``).
 
         It is installed in your library and private unless ``visibility`` says
-        otherwise. ``source`` records where the folder came from
-        (``claude-code``, ``codex``...).
+        otherwise; ``"public"`` publishes it, every file included, to every
+        Beakr organization. ``source`` records where the folder came from
+        (``claude-code``, ``codex``...). Returns the skill as :meth:`get` does.
         """
         body = clean_body(
             {
@@ -269,7 +271,7 @@ class Skills(Resource[M]):
                 "slug_hint": slug_hint,
             }
         )
-        return self._run(ops.build_skills_import_skill_bundle(body=body))
+        return self._run(ops.build_skills_create_skill(body=body))
 
     def create_from_folder(
         self,
