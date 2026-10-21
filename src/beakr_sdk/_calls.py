@@ -17,6 +17,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Generic, Literal, TypeVar
 from urllib.parse import urlencode
 
+from beakr_sdk._redact import Shown, dataclass_repr, redact_fields, redact_headers, redact_url
 from beakr_sdk._replay import replays_idempotency_key
 
 ResponseKind = Literal["json", "text", "bytes", "none", "stream", "headers"]
@@ -81,8 +82,25 @@ class Call(Generic[R]):
             return True
         return self.method.upper() in {"GET", "HEAD", "PUT", "DELETE", "OPTIONS"}
 
+    def __repr__(self) -> str:
+        # A call can carry a credential: an Authorization header, a refresh
+        # token in a form body (``oauth_form_call``), a secret JSON field or
+        # query parameter, a presigned URL's signature.
+        return dataclass_repr(
+            self,
+            {
+                "path": redact_url,
+                "params": lambda params: params if params is None else redact_fields(params),
+                "headers": redact_headers,
+                "json": lambda body: body if body is _UNSET else redact_fields(body),
+                "content": lambda content: (
+                    content if content is None else Shown(f"<{len(content)} bytes>")
+                ),
+            },
+        )
 
-@dataclass(frozen=True)
+
+@dataclass(frozen=True, repr=False)
 class ListCall(Call[Any], Generic[I]):
     """A request for one page of a paginated list whose items are ``I``.
 
