@@ -1261,6 +1261,10 @@ Each release lists the public API changes it supports, taken from the API change
   header or presigned-URL signature as its kind and at most its last four
   characters (`bk_live_...a1b2`). Printing a client's credential used to show
   the whole key.
+- `projects.add_member(project_id, principal_id, role=None)` sends a `role`
+  only when one is given: adding an existing member again keeps their role
+  instead of resetting it to `member` (a new member still joins as `member`).
+  Demoting the last owner answers `409 last_owner`.
 - **`NotProvidedError`.** A 404 whose body is the router's bare
   `{"detail": "Not Found"}` (a route this installation does not have, such as
   skills, integrations or organization administration on a self-hosted
