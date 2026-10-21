@@ -1285,6 +1285,13 @@ Each release lists the public API changes it supports, taken from the API change
   header or presigned-URL signature as its kind and at most its last four
   characters (`bk_live_...a1b2`). Printing a client's credential used to show
   the whole key.
+- `files.upload_many(..., wait=...)` reads `summary.duplicates`: when the batch
+  counts duplicates apart, `summary.failed` is the other failures, so a real
+  failure beside a duplicate is `failed` rather than `succeeded` (an earlier
+  engine's count, with duplicates in `failed`, is still read). A job that
+  succeeded with `job.result.summary.duplicates` still lists `duplicates` and,
+  with `wait="knowledge"`, waits for each kept file; with none, no batch read
+  is added.
 - **Source records name who filed a citation.** `knowledge.pages.sources()`,
   `runs.answer()` and every other `beakr_sdk.sources.public_source` record keep
   `filed_by` (from the record, or a page sources row's `meta.filed_by`) in its
