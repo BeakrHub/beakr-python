@@ -48,7 +48,9 @@ def already_uploaded_outcome(batch_status: Mapping[str, Any]) -> dict[str, Any]:
     Indexing does not store bytes already in the same place twice: it rejects
     the new file as ``duplicate`` and keeps the existing one
     (``duplicate_of``). That is "already uploaded", not a failure, so an upload
-    whose only failed files are duplicates has ``status`` ``"succeeded"``.
+    whose only failed files are duplicates has ``status`` ``"succeeded"``. An
+    engine that counts them in ``summary.duplicates`` leaves them out of
+    ``summary.failed``; an earlier one counted them there.
     """
     files = batch_status.get("artifacts") or []
     duplicates = [
@@ -62,9 +64,11 @@ def already_uploaded_outcome(batch_status: Mapping[str, Any]) -> dict[str, Any]:
         and isinstance(item.get("duplicate_of"), Mapping)
         and item["duplicate_of"].get("artifact_id")
     ]
-    failed = int((batch_status.get("summary") or {}).get("failed") or 0)
+    summary = batch_status.get("summary") or {}
+    failed = int(summary.get("failed") or 0)
+    others_failed = failed if "duplicates" in summary else failed - len(duplicates)
     outcome: dict[str, Any] = {"duplicates": duplicates}
-    if duplicates and failed <= len(duplicates):
+    if duplicates and others_failed <= 0:
         outcome["status"] = "succeeded"
     return outcome
 
@@ -176,8 +180,9 @@ class Files(Resource[M]):
         A file whose bytes are already in the same place is not stored twice: it
         is listed in ``duplicates`` (``path``, ``artifact_id``, and
         ``duplicate_of``, the file that was kept), and when every failed file is
-        such a duplicate ``status`` is ``"succeeded"`` though the job reports
-        ``failed``. ``wait="knowledge"`` then also waits
+        such a duplicate ``status`` is ``"succeeded"`` (the job succeeds too on
+        an engine that counts them in ``summary.duplicates``; an earlier one
+        reports it ``failed``). ``wait="knowledge"`` then also waits
         until none of the batch's files is queued or running for Knowledge
         (polling every ``poll`` seconds, growing) and adds the final
         :meth:`batch_status` as ``batch``: each file's ``knowledge_status`` and
@@ -208,7 +213,14 @@ class Files(Resource[M]):
             deadline = time.monotonic() + timeout
             job = yield from Jobs(self._client).wait_flow(completed, timeout=timeout)
             result: dict[str, Any] = {**completed, "job": job, "status": job.get("status")}
-            if job.get("status") == "failed":
+            # A job that succeeded may still have duplicates (``summary.duplicates``):
+            # read the batch to list them and to wait for the files that were kept.
+            job_result = job.get("result")
+            job_summary = job_result.get("summary") if isinstance(job_result, Mapping) else None
+            duplicated = (
+                isinstance(job_summary, Mapping) and int(job_summary.get("duplicates") or 0) > 0
+            )
+            if job.get("status") == "failed" or duplicated:
                 batch_now = yield ops.build_uploads_get_bulk_upload_status(
                     str(completed["batch_id"])
                 )
