@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.organizations import Organizations
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
+    from beakr_sdk.resources.skills import Skills
 
 
 class Beakr(BaseClient):
@@ -96,6 +97,7 @@ class Beakr(BaseClient):
     knowledge: Knowledge[Sync]
     runs: Runs[Sync]
     interviews: Interviews[Sync]
+    skills: Skills[Sync]
     threads: Threads[Sync]
     conversations: Conversations[Sync]
     engine: Engine[Sync]
