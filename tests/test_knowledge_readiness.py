@@ -14,6 +14,7 @@ import httpx
 import pytest
 import respx
 
+from beakr_sdk.resources.files import already_uploaded_outcome
 from beakr_sdk.resources.knowledge_readiness import KnowledgeFailed, KnowledgeTimeout
 
 from .conftest import BASE
@@ -318,3 +319,127 @@ async def test_async_upload_many_treats_a_duplicate_as_already_uploaded(
 
     assert result["status"] == "succeeded"
     assert result["duplicates"][0]["kept_knowledge_status"] == "created"
+
+
+# -- An engine that counts duplicates apart (``summary.duplicates``) -------------
+#
+# The engine moved an already-uploaded file out of ``summary.failed`` into
+# ``summary.duplicates``, and a batch whose only refusals are duplicates now
+# succeeds. ``failed <= len(duplicates)`` then read one real failure beside one
+# duplicate as success, and reading the batch only on a failed job stopped
+# listing duplicates and waiting for the kept files.
+
+
+def _counted_duplicate_batch(*, also_failed: int = 0) -> dict:
+    batch = _duplicate_batch().json()
+    batch["summary"] = {"total": 1 + also_failed, "failed": also_failed, "duplicates": 1}
+    return batch
+
+
+def _mock_succeeded_batch_job(*, duplicates: int) -> None:
+    _mock_upload()
+    respx.get(f"{BASE}/v1/jobs/j1").respond(
+        200,
+        json={
+            "job_id": "j1",
+            "status": "succeeded",
+            "result": {
+                "summary": {"total": 1, "indexed": 0, "failed": 0, "duplicates": duplicates}
+            },
+        },
+    )
+
+
+def test_already_uploaded_outcome_reads_both_counts() -> None:
+    # This engine: ``failed`` is the other failures.
+    assert already_uploaded_outcome(_counted_duplicate_batch())["status"] == "succeeded"
+    assert "status" not in already_uploaded_outcome(_counted_duplicate_batch(also_failed=1))
+    # An earlier engine counted the duplicates in ``failed``.
+    assert already_uploaded_outcome(_duplicate_batch().json())["status"] == "succeeded"
+    assert "status" not in already_uploaded_outcome(_duplicate_batch(also_failed=1).json())
+    # No duplicates: nothing to say.
+    assert already_uploaded_outcome({"artifacts": [], "summary": {"failed": 0}}) == {
+        "duplicates": []
+    }
+
+
+@respx.mock
+def test_a_succeeded_job_with_duplicates_lists_them_and_waits_for_the_kept_file(
+    client, tmp_path
+) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_succeeded_batch_job(duplicates=1)
+    status = respx.get(f"{BASE}/v1/bulk/b1/status").respond(200, json=_counted_duplicate_batch())
+    respx.get(f"{BASE}/v1/artifacts/kept1").respond(
+        200, json={"id": "kept1", "knowledge_status": "created"}
+    )
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait="knowledge")
+
+    assert result["job"]["status"] == "succeeded"
+    assert result["status"] == "succeeded"
+    [duplicate] = result["duplicates"]
+    assert duplicate["duplicate_of"]["artifact_id"] == "kept1"
+    assert duplicate["kept_knowledge_status"] == "created"
+    # Once for the duplicates, once for the batch's own Knowledge wait.
+    assert status.call_count == 2
+
+
+@respx.mock
+def test_a_succeeded_job_without_duplicates_reads_no_batch(client, tmp_path) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_succeeded_batch_job(duplicates=0)
+    status = respx.get(f"{BASE}/v1/bulk/b1/status")
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait=True)
+
+    assert result["status"] == "succeeded"
+    assert "duplicates" not in result
+    assert not status.called
+
+
+@respx.mock
+def test_a_real_failure_beside_a_counted_duplicate_still_fails(client, tmp_path) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").respond(
+        200, json=_counted_duplicate_batch(also_failed=1)
+    )
+
+    result = client.files.upload_many(tmp_path / "a.md", project_id="p1", wait=True)
+
+    assert result["status"] == "failed"
+    assert len(result["duplicates"]) == 1
+
+
+@respx.mock
+async def test_async_upload_many_reads_counted_duplicates(async_client, tmp_path) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_succeeded_batch_job(duplicates=1)
+    respx.get(f"{BASE}/v1/bulk/b1/status").respond(200, json=_counted_duplicate_batch())
+    respx.get(f"{BASE}/v1/artifacts/kept1").respond(
+        200, json={"id": "kept1", "knowledge_status": "created"}
+    )
+
+    result = await async_client.files.upload_many(
+        tmp_path / "a.md", project_id="p1", wait="knowledge"
+    )
+
+    assert result["status"] == "succeeded"
+    assert result["duplicates"][0]["kept_knowledge_status"] == "created"
+
+
+@respx.mock
+async def test_async_a_real_failure_beside_a_counted_duplicate_still_fails(
+    async_client, tmp_path
+) -> None:
+    (tmp_path / "a.md").write_text("a")
+    _mock_failed_batch_job()
+    respx.get(f"{BASE}/v1/bulk/b1/status").respond(
+        200, json=_counted_duplicate_batch(also_failed=1)
+    )
+
+    result = await async_client.files.upload_many(tmp_path / "a.md", project_id="p1", wait=True)
+
+    assert result["status"] == "failed"
+    assert len(result["duplicates"]) == 1

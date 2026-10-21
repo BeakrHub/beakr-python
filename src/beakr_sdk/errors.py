@@ -14,17 +14,28 @@ envelope second.
 Routes that predate the envelope send ``detail`` only, so every field falls
 back: the message to ``detail``, the request id to the ``X-Request-Id`` response
 header, and the code to one derived from status.
+
+A 404 whose body is the router's bare ``{"detail": "Not Found"}`` (no
+envelope) is a route this server does not have, not a missing record: a
+self-hosted installation leaves out skills, integrations, organization
+administration and other hosted areas. It raises :class:`NotProvidedError`, a
+:class:`NotFoundError`, which names the area.
+
+An error's ``str()`` and ``repr()`` mask any Beakr key or bearer token in its
+message.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from beakr_sdk._http_date import parse_http_date
+from beakr_sdk._redact import scrub
 
 
 class BeakrError(Exception):
@@ -67,7 +78,10 @@ class BeakrError(Exception):
             parts.append(f"To fix: {self.fix}")
         if self.request_id:
             parts.append(f"[request {self.request_id}]")
-        return " ".join(parts)
+        return scrub(" ".join(parts))
+
+    def __repr__(self) -> str:
+        return f"{type(self).__name__}({scrub(self.message)!r})"
 
 
 def quota_text(details: dict[str, Any]) -> str | None:
@@ -110,6 +124,36 @@ class PermissionDeniedError(BeakrError):
 
 class NotFoundError(BeakrError):
     """404."""
+
+
+class NotProvidedError(NotFoundError):
+    """404 for a route this Beakr installation does not have.
+
+    A self-hosted installation leaves out hosted areas (skills, integrations,
+    organization members, external users, end-user tokens, service accounts,
+    organization administration) and answers them with the router's bare
+    ``{"detail": "Not Found"}``; a missing record answers 404 with an error
+    envelope and stays a plain :class:`NotFoundError`. The message is "This
+    Beakr installation does not provide <area>." ``area`` is that name, or
+    ``None`` when the path belongs to no known area and the message names the
+    operation (``method`` and ``path``) instead.
+    ``beakr.meta.capabilities().serves(method, path)`` tells the same before
+    calling.
+    """
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        area: str | None = None,
+        method: str | None = None,
+        path: str | None = None,
+        **kwargs: Any,
+    ) -> None:
+        super().__init__(message, **kwargs)
+        self.area = area
+        self.method = method
+        self.path = path
 
 
 class ConflictError(BeakrError):
@@ -172,6 +216,66 @@ _DEFAULT_CODES = {
     422: "validation_error",
     429: "rate_limited",
 }
+
+
+#: Areas an installation may leave out, most specific prefix first, named as the
+#: Beakr CLI names them (``beakr_cli.capabilities.AREAS``). The CLI also names
+#: areas outside the documented contract, which this package never calls.
+NOT_PROVIDED_AREAS: tuple[tuple[str, re.Pattern[str]], ...] = (
+    ("organization members", re.compile(r"^/v1/organizations/[^/]+/members(/|$)")),
+    ("external users", re.compile(r"^/v1/organizations/[^/]+/external-users(/|$)")),
+    ("service accounts", re.compile(r"^/v1/organizations/[^/]+/service-accounts(/|$)")),
+    ("organization administration", re.compile(r"^/v1/organizations(/|$)")),
+    ("end-user tokens", re.compile(r"^/v1/auth/end-user-tokens(/|$)")),
+    ("integrations", re.compile(r"^/v1/integrations(/|$)")),
+    ("skills", re.compile(r"^/v1/(me/)?skills(/|$)")),
+)
+
+
+def not_provided_area(path: str) -> str | None:
+    """The name of the area an API path belongs to, or ``None``."""
+    path = api_path(path)
+    for name, pattern in NOT_PROVIDED_AREAS:
+        if pattern.match(path):
+            return name
+    return None
+
+
+def api_path(url_path: str) -> str:
+    """The API path of a request URL's path (``/v1/...``), past any base-URL prefix."""
+    index = url_path.find("/v1/")
+    return url_path[index:] if index >= 0 else url_path
+
+
+def is_bare_not_found(status: int, body: Any) -> bool:
+    """A 404 for a route the server does not have: ``{"detail": "Not Found"}``, no envelope.
+
+    A missing record answers 404 too, but with an error envelope and its own
+    message ("Project not found"); only the router's own reply is this bare.
+    """
+    return (
+        status == 404
+        and isinstance(body, dict)
+        and body.get("detail") == "Not Found"
+        and "error" not in body
+    )
+
+
+def _not_provided(response: httpx.Response, common: dict[str, Any]) -> NotProvidedError:
+    try:
+        request = response.request
+        method, path = request.method, api_path(request.url.path)
+    except RuntimeError:  # a response built without its request
+        method, path = "", ""
+    area = not_provided_area(path) if path else None
+    named = area or (f"{method} {path}" if path else "this operation")
+    return NotProvidedError(
+        f"This Beakr installation does not provide {named}.",
+        area=area,
+        method=method or None,
+        path=path or None,
+        **common,
+    )
 
 
 def parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:
@@ -268,6 +372,8 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
             **common,
         )
     if status == 404:
+        if is_bare_not_found(status, body):
+            return _not_provided(response, common)
         return NotFoundError(message, **common)
     if status == 409:
         return ConflictError(message, **common)
