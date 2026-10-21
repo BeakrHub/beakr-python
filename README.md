@@ -174,9 +174,16 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
   ambiguous failure. 501, 505 and other 4xx are never retried.
 - **Errors**: `BeakrError` with `status`, `code`, `message` and `request_id`;
   subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`),
-  `NotFoundError`, `ConflictError`, `ValidationError`, `RateLimitError`,
-  `ServerError`, `APIConnectionError`, and `KnowledgeCommandError` for a
-  knowledge command the door refused.
+  `NotFoundError` (and its subclass `NotProvidedError`, below), `ConflictError`,
+  `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`, and
+  `KnowledgeCommandError` for a knowledge command the door refused.
+- **Secrets stay out of output**: `repr()` and `str()` of the client, its
+  `credential`, a stored sign-in, a service-account file, a request and an
+  error show an API key, access or refresh token or `Authorization` header
+  masked to its kind and last four characters (`bk_live_...a1b2`), so printing
+  one in a test or a log does not leak it. Responses are returned as they come:
+  the `key` of `keys.create` or `org.service_accounts.mint_key` and the `token`
+  of `end_user_tokens.mint` are plain dict values, shown once.
 - **Resources** (the documented core only): `keys`, `me`,
   `meta`, `jobs`, `organizations`, `members`, `org` (`service_accounts`),
   `external_users`, `labels`, `end_user_tokens`, `projects`, `files` (with
@@ -192,8 +199,8 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
 ### What this installation serves: `beakr.meta.capabilities()`
 
 A self-hosted Beakr installation serves only part of the documented contract
-(no organization administration, external users, end-user tokens, service
-accounts or integrations) and answers a bare 404 for the rest. Each server
+(no organization administration or members, external users, end-user tokens,
+service accounts, integrations or skills) and answers a bare 404 for the rest. Each server
 lists what it serves in its own `GET /v1/public/openapi.json`;
 `capabilities()` reads it once per base URL (cached for five minutes) so a
 client can hide what is not there instead of failing on it:
@@ -207,6 +214,23 @@ if not caps.serves("GET", "/v1/integrations"):
 `serves` takes a concrete path or a contract template. A server that publishes
 no document is assumed to serve everything, and a route outside the documented
 contract is always assumed served: the document cannot speak for it.
+
+Calling one anyway raises `NotProvidedError`, a `NotFoundError` (so an existing
+`except NotFoundError` still catches it), when the 404 is the router's bare
+`{"detail": "Not Found"}`. Its message names the area, in the CLI's words
+("This Beakr installation does not provide skills."), or the operation
+(`GET /v1/me/organization`) when the path belongs to no known area; `area`,
+`method` and `path` hold the same. A missing record answers 404 with an error
+envelope and stays a plain `NotFoundError`.
+
+```python
+from beakr_sdk.errors import NotProvidedError
+
+try:
+    beakr.skills.list()
+except NotProvidedError as exc:
+    print(exc.message)  # This Beakr installation does not provide skills.
+```
 
 ### The generated, typed layer: `beakr.api`
 

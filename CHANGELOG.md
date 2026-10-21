@@ -1255,3 +1255,16 @@ Each release lists the public API changes it supports, taken from the API change
 - `conversations.import_` defaults `interactive` to `false`, matching the API.
 - `knowledge.stage_row("finding", page, kind=...)` passes the finding's own
   `kind`; `kind` and `page` are positional-only.
+- **Secrets are masked when printed.** `repr()` and `str()` of the client,
+  `Credential`, `StoredTokens`, `ServiceAccountFile`, a request (`Call`) and
+  every `BeakrError` show an API key, access or refresh token, `Authorization`
+  header or presigned-URL signature as its kind and at most its last four
+  characters (`bk_live_...a1b2`). Printing a client's credential used to show
+  the whole key.
+- **`NotProvidedError`.** A 404 whose body is the router's bare
+  `{"detail": "Not Found"}` (a route this installation does not have, such as
+  skills, integrations or organization administration on a self-hosted
+  installation) raises `NotProvidedError`, a `NotFoundError` subclass, with the
+  message "This Beakr installation does not provide <area>." (or the
+  operation, when the path belongs to no known area) and `area`, `method` and
+  `path`. A 404 with an error envelope stays a plain `NotFoundError`.

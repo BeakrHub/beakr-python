@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 import httpx
 
 from beakr_sdk._calls import Call, clean_params, oauth_form_call
+from beakr_sdk._redact import mask
 from beakr_sdk._replay import IDEMPOTENCY_RETRY_CODES
 from beakr_sdk._version import __version__
 from beakr_sdk.credentials import (
@@ -140,6 +141,17 @@ class BaseClient:
         #: Injectable so tests can pin the clock an HTTP-date ``Retry-After`` is
         #: measured against.
         self._now: Callable[[], datetime] = _utc_now
+
+    def __repr__(self) -> str:
+        # Never resolves the credential (that reads the keychain); shows the one
+        # in use, else the explicit key, masked either way.
+        credential: object = self._credential
+        if credential is None:
+            credential = mask(self._explicit_api_key) if self._explicit_api_key else "unresolved"
+        return (
+            f"{type(self).__name__}(base_url={self.base_url!r}, org_id={self.org_id!r}, "
+            f"credential={credential!r})"
+        )
 
     # -- credentials -------------------------------------------------------
 
