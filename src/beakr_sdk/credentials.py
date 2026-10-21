@@ -54,6 +54,7 @@ from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlsplit
 
+from beakr_sdk._redact import dataclass_repr, mask, redact_headers
 from beakr_sdk.errors import AuthenticationError
 
 DEFAULT_BASE_URL = "https://api.thebeakr.com"
@@ -219,6 +220,9 @@ class StoredTokens:
             return False
         current = time.time() if now is None else now
         return current >= self.expires_at - REFRESH_SKEW_SECONDS
+
+    def __repr__(self) -> str:
+        return dataclass_repr(self, {"access_token": mask, "refresh_token": mask})
 
 
 ClearOutcome = Literal["cleared", "cleared_locally", "absent"]
@@ -598,7 +602,8 @@ def _barrier_of(data: Any) -> dict[str, Any] | None:
 @dataclass(frozen=True)
 class _StoredState:
     generation: int
-    data: Any
+    # The stored logins themselves: tokens, never shown.
+    data: Any = field(repr=False)
     max_generation: int
     barrier: dict[str, Any] | None
     # The keychain could not be read, so the stored logins are unknown.
@@ -792,6 +797,9 @@ class ServiceAccountFile:
     key_id: str | None = None
     name: str | None = None
 
+    def __repr__(self) -> str:
+        return dataclass_repr(self, {"api_key": mask})
+
 
 def service_account_file_path() -> tuple[Path, bool]:
     """The file to read, and whether it was named explicitly (by the env var)."""
@@ -890,6 +898,10 @@ class Credential:
             return dict(self.dev_headers)
         bearer = self.tokens.access_token if self.tokens else self.token
         return {"Authorization": f"Bearer {bearer}"} if bearer else {}
+
+    def __repr__(self) -> str:
+        # ``tokens`` formats itself redacted.
+        return dataclass_repr(self, {"token": mask, "dev_headers": redact_headers})
 
 
 #: Hosts a legacy saved dev identity (one saved without ``dev_origin``) may be
