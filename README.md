@@ -78,6 +78,32 @@ print(beakr.projects.knowledge_profile(project_id)["entity_types"])
 `knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
 while the project has none.
 
+### Skills
+
+A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers
+your own skills, your organization's, the built-in ones and public skills from
+anywhere; each carries `visibility`, `owner` (`me`, `org`, `system`, `anyone`),
+`origin` (`created`, `mined`, `imported`, `system`) and `installed`, and each
+is also a filter.
+
+```python
+mine = beakr.skills.list(owner="me")
+builtin = beakr.skills.list(owner="system")
+to_install = beakr.skills.list(visibility="public", installed=False)
+
+skill = beakr.skills.create_from_folder("skills/plate-reader")  # or a .zip
+beakr.skills.download(skill["id"], "exported/")                 # exported/plate-reader/
+beakr.skills.install(to_install[0]["id"])
+
+for proposal in beakr.skills.proposals.list():                  # drafted from your work
+    beakr.skills.proposals.accept(proposal["id"])
+```
+
+`skills.get` takes an id or a slug; a slug resolves to your own skill first,
+then a built-in, then one you installed, then your organization's.
+`upload_bundle(skill_id, files, expected_sha256=...)` raises `ConflictError`
+(`code == "skill_conflict"`) when the skill changed since you read it.
+
 ### Know when Knowledge is ready
 
 Uploaded files reach a project's Knowledge in the background after indexing.
@@ -127,7 +153,9 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
 - **Base URL**: explicit `base_url`, `BEAKR_BASE_URL` / `BEAKR_API_URL`, the CLI
   config, then `https://api.thebeakr.com`.
 - **Headers**: `X-Beakr-Client` (`sdk-python/<version>` unless `client_name=`),
-  `X-Beakr-Agent` when `agent=` is set, and an `Idempotency-Key` on create calls.
+  `X-Beakr-Agent` when `agent=` is set, `X-Beakr-Run` when `run=` is set,
+  `X-Beakr-Session` when `session=` (default: `BEAKR_SESSION`) names the agent
+  session behind the writes, and an `Idempotency-Key` on create calls.
 - **Retries**: 429, 500, 502, 503, 504 and connection errors, with exponential
   backoff and jitter, honoring `Retry-After` (`max_retries=` to change). The
   header may be seconds or an HTTP-date (IMF-fixdate, or the obsolete RFC 850
@@ -146,9 +174,16 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
   ambiguous failure. 501, 505 and other 4xx are never retried.
 - **Errors**: `BeakrError` with `status`, `code`, `message` and `request_id`;
   subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`),
-  `NotFoundError`, `ConflictError`, `ValidationError`, `RateLimitError`,
-  `ServerError`, `APIConnectionError`, and `KnowledgeCommandError` for a
-  knowledge command the door refused.
+  `NotFoundError` (and its subclass `NotProvidedError`, below), `ConflictError`,
+  `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`, and
+  `KnowledgeCommandError` for a knowledge command the door refused.
+- **Secrets stay out of output**: `repr()` and `str()` of the client, its
+  `credential`, a stored sign-in, a service-account file, a request and an
+  error show an API key, access or refresh token or `Authorization` header
+  masked to its kind and last four characters (`bk_live_...a1b2`), so printing
+  one in a test or a log does not leak it. Responses are returned as they come:
+  the `key` of `keys.create` or `org.service_accounts.mint_key` and the `token`
+  of `end_user_tokens.mint` are plain dict values, shown once.
 - **Resources** (the documented core only): `keys`, `me`,
   `meta`, `jobs`, `organizations`, `members`, `org` (`service_accounts`),
   `external_users`, `labels`, `end_user_tokens`, `projects`, `files` (with
@@ -164,8 +199,8 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
 ### What this installation serves: `beakr.meta.capabilities()`
 
 A self-hosted Beakr installation serves only part of the documented contract
-(no organization administration, external users, end-user tokens, service
-accounts or integrations) and answers a bare 404 for the rest. Each server
+(no organization administration or members, external users, end-user tokens,
+service accounts, integrations or skills) and answers a bare 404 for the rest. Each server
 lists what it serves in its own `GET /v1/public/openapi.json`;
 `capabilities()` reads it once per base URL (cached for five minutes) so a
 client can hide what is not there instead of failing on it:
@@ -179,6 +214,23 @@ if not caps.serves("GET", "/v1/integrations"):
 `serves` takes a concrete path or a contract template. A server that publishes
 no document is assumed to serve everything, and a route outside the documented
 contract is always assumed served: the document cannot speak for it.
+
+Calling one anyway raises `NotProvidedError`, a `NotFoundError` (so an existing
+`except NotFoundError` still catches it), when the 404 is the router's bare
+`{"detail": "Not Found"}`. Its message names the area, in the CLI's words
+("This Beakr installation does not provide skills."), or the operation
+(`GET /v1/me/organization`) when the path belongs to no known area; `area`,
+`method` and `path` hold the same. A missing record answers 404 with an error
+envelope and stays a plain `NotFoundError`.
+
+```python
+from beakr_sdk.errors import NotProvidedError
+
+try:
+    beakr.skills.list()
+except NotProvidedError as exc:
+    print(exc.message)  # This Beakr installation does not provide skills.
+```
 
 ### The generated, typed layer: `beakr.api`
 

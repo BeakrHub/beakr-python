@@ -115,11 +115,18 @@ class Projects(Resource[M]):
         project_id: str,
         principal_id: str,
         *,
-        role: str = "member",
+        role: str | None = None,
         principal_type: str = "user",
     ) -> Any:
-        """Give a user (or group) a role in the project."""
-        body = {"principal_id": principal_id, "principal_type": principal_type, "role": role}
+        """Give a user (or group) a role in the project.
+
+        Without ``role``, none is sent: a new member joins as ``member`` and an
+        existing member keeps the role they have. Demoting the last owner is
+        refused (``409 last_owner``).
+        """
+        body: dict[str, Any] = {"principal_id": principal_id, "principal_type": principal_type}
+        if role is not None:
+            body["role"] = role
         return self._run(ops.build_projects_add_member(project_id, body=body))
 
     @returns(ops.build_projects_remove_member)
