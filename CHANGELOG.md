@@ -1261,6 +1261,11 @@ Each release lists the public API changes it supports, taken from the API change
   header or presigned-URL signature as its kind and at most its last four
   characters (`bk_live_...a1b2`). Printing a client's credential used to show
   the whole key.
+- **Source records name who filed a citation.** `knowledge.pages.sources()`,
+  `runs.answer()` and every other `beakr_sdk.sources.public_source` record keep
+  `filed_by` (from the record, or a page sources row's `meta.filed_by`) in its
+  public form: `user_name`, `agent`, `client`, `run`, `session` and `text`,
+  never `user_id`. It was dropped before.
 - `projects.add_member(project_id, principal_id, role=None)` sends a `role`
   only when one is given: adding an existing member again keeps their role
   instead of resetting it to `member` (a new member still joins as `member`).
