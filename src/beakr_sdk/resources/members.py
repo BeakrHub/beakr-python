@@ -16,6 +16,7 @@ from typing import Any
 from beakr_sdk._calls import Flow
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
+from beakr_sdk.errors import NotProvidedError
 from beakr_sdk.resources._base import Resource, collect_pages
 
 ORG_ROLES = ("owner", "admin", "member", "viewer")
@@ -25,7 +26,10 @@ class Members(Resource[M]):
     def _org_id_flow(self, org_id: str | None) -> Flow:
         if org_id:
             return org_id
-        org = yield ops.build_organizations_get_active_org()
+        try:
+            org = yield ops.build_organizations_get_active_org()
+        except NotProvidedError as exc:
+            raise exc.naming("organization members") from None
         return str(org["id"])
 
     def list(self, *, org_id: str | None = None) -> Any:

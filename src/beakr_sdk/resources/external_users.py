@@ -47,6 +47,8 @@ def user_id_of(value: str) -> str:
 class ExternalUsers(_OrgScoped[M]):
     """``/v1/organizations/{org_id}/external-users``; ``org_id`` defaults to the active org."""
 
+    _AREA = "external users"
+
     def list(self, *, external_id: str | None = None, org_id: str | None = None) -> Any:
         """Every external user of the organization; ``external_id`` finds the one your
         credential created with that id."""

@@ -61,6 +61,39 @@ def test_a_bare_404_outside_a_known_area_names_the_operation(client) -> None:
     assert (error.method, error.path) == ("GET", "/v1/me/organization")
 
 
+@pytest.mark.parametrize(
+    ("call", "area"),
+    [
+        (lambda c: c.members.list(), "organization members"),
+        (lambda c: c.members.add("u1"), "organization members"),
+        (lambda c: c.external_users.list(), "external users"),
+        (lambda c: c.org.service_accounts.list(), "service accounts"),
+    ],
+)
+@respx.mock
+def test_an_unprovided_active_org_lookup_names_the_methods_area(client, call, area) -> None:
+    # ROOT CAUSE (box 0.1.8): without an org_id these methods first read
+    # GET /v1/me/organization, which a self-hosted box does not have, so the
+    # refusal named that route ("does not provide GET /v1/me/organization", area
+    # None) instead of what the caller asked for.
+    respx.get(f"{BASE}/v1/me/organization").respond(404, json=BARE, headers={"x-request-id": "r9"})
+    with pytest.raises(NotProvidedError) as caught:
+        call(client)
+    error = caught.value
+    assert error.message == f"This Beakr installation does not provide {area}."
+    assert error.area == area
+    assert (error.method, error.path) == ("GET", "/v1/me/organization")
+    assert (error.status, error.code, error.request_id) == (404, "not_found", "r9")
+    assert error.response is not None
+
+
+@respx.mock
+async def test_the_async_client_names_the_methods_area_too(async_client) -> None:
+    respx.get(f"{BASE}/v1/me/organization").respond(404, json=BARE)
+    with pytest.raises(NotProvidedError, match="does not provide organization members"):
+        await async_client.members.list()
+
+
 @respx.mock
 async def test_the_async_client_raises_it_too(async_client) -> None:
     respx.get(f"{BASE}/v1/integrations").respond(404, json=BARE)

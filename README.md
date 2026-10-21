@@ -219,8 +219,9 @@ Calling one anyway raises `NotProvidedError`, a `NotFoundError` (so an existing
 `except NotFoundError` still catches it), when the 404 is the router's bare
 `{"detail": "Not Found"}`. Its message names the area, in the CLI's words
 ("This Beakr installation does not provide skills."), or the operation
-(`GET /v1/me/organization`) when the path belongs to no known area; `area`,
-`method` and `path` hold the same. A missing record answers 404 with an error
+when the path belongs to no known area; `area`, `method` and `path` hold the
+same. A method that first looks up the active organization (`members.list()`
+without `org_id`) names its own area when that lookup is the route missing. A missing record answers 404 with an error
 envelope and stays a plain `NotFoundError`.
 
 ```python

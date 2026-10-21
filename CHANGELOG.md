@@ -1308,3 +1308,11 @@ Each release lists the public API changes it supports, taken from the API change
   message "This Beakr installation does not provide <area>." (or the
   operation, when the path belongs to no known area) and `area`, `method` and
   `path`. A 404 with an error envelope stays a plain `NotFoundError`.
+  A method that first looks up the active organization (`members`,
+  `external_users`, `org.service_accounts` without `org_id`) names its own
+  area when that lookup is not provided ("does not provide organization
+  members."), not `GET /v1/me/organization`.
+- `str(KnowledgeCommandError)` names the refusal's code alone ("No page 'X'.
+  (page_not_found)"), as the Beakr CLI does: the door answers a refusal in a
+  200 body, so "(HTTP 200, page_not_found)" read as if HTTP had refused it.
+  `status` is still 200.
