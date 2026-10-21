@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.organizations import Organizations
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
+    from beakr_sdk.resources.skills import Skills
 
 
 class _LockAcquisition:
@@ -139,6 +140,7 @@ class AsyncBeakr(BaseClient):
     knowledge: Knowledge[Async]
     runs: Runs[Async]
     interviews: Interviews[Async]
+    skills: Skills[Async]
     threads: Threads[Async]
     conversations: Conversations[Async]
     engine: Engine[Async]

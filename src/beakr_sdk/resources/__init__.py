@@ -28,6 +28,7 @@ from beakr_sdk.resources.org_admin import OrgAdmin
 from beakr_sdk.resources.organizations import Organizations
 from beakr_sdk.resources.projects import Projects
 from beakr_sdk.resources.runs import Runs, Threads
+from beakr_sdk.resources.skills import Skills
 
 __all__ = ["attach_resources"]
 
@@ -56,6 +57,8 @@ def attach_resources(client: Any) -> None:
     client.knowledge = Knowledge(client)
     client.runs = Runs(client)
     client.interviews = Interviews(client)
+    # Skills: SKILL.md folders the agent loads, and the caller's library.
+    client.skills = Skills(client)
     # Conversations
     client.threads = Threads(client)
     client.conversations = Conversations(client)

@@ -78,6 +78,32 @@ print(beakr.projects.knowledge_profile(project_id)["entity_types"])
 `knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
 while the project has none.
 
+### Skills
+
+A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers
+your own skills, your organization's, the built-in ones and public skills from
+anywhere; each carries `visibility`, `owner` (`me`, `org`, `system`, `anyone`),
+`origin` (`created`, `mined`, `imported`, `system`) and `installed`, and each
+is also a filter.
+
+```python
+mine = beakr.skills.list(owner="me")
+builtin = beakr.skills.list(owner="system")
+to_install = beakr.skills.list(visibility="public", installed=False)
+
+skill = beakr.skills.create_from_folder("skills/plate-reader")  # or a .zip
+beakr.skills.download(skill["id"], "exported/")                 # exported/plate-reader/
+beakr.skills.install(to_install[0]["id"])
+
+for proposal in beakr.skills.proposals.list():                  # drafted from your work
+    beakr.skills.proposals.accept(proposal["id"])
+```
+
+`skills.get` takes an id or a slug; a slug resolves to your own skill first,
+then a built-in, then one you installed, then your organization's.
+`upload_bundle(skill_id, files, expected_sha256=...)` raises `ConflictError`
+(`code == "skill_conflict"`) when the skill changed since you read it.
+
 ### Know when Knowledge is ready
 
 Uploaded files reach a project's Knowledge in the background after indexing.

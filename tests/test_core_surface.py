@@ -44,6 +44,7 @@ CORE_RESOURCES = {
     "organizations",
     "projects",
     "runs",
+    "skills",
     "threads",
 }
 
@@ -62,7 +63,6 @@ UNLISTED_RESOURCES = {
     "presentation_templates",
     "profile",
     "sharing",
-    "skills",
     "templates",
     "trace",
     "usage",
