@@ -3,10 +3,35 @@
 Releases of `beakr-sdk`, the Beakr Python SDK (`import beakr_sdk`).
 Each release lists the public API changes it supports, taken from the API changelog.
 
-## beakr-sdk 0.1.0 (2026-10-17)
+## beakr-sdk 0.1.0 (2026-10-21)
 
 ### Changes
 
+- Source records (`sources` on `POST /v1/knowledge/wiki/command` reads and
+  `POST /v1/knowledge/wiki/write` results): an inline `conversation`,
+  `agent_note` or `user_note` citation written with an API credential carries
+  `filed_by`: the person's `user_name` (their display name when the record is
+  read, absent when they have none), the `agent`, `client` and `run` the
+  request declared, the `session` it sent in the new optional
+  `X-Beakr-Session` header (the client's own session id, attribution only),
+  and a `text` line. It never carries the person's id or email. The
+  citation's `meta.filed_by`, which `GET /v1/knowledge/wiki/pages/{page_id}/sources`
+  returns, holds the same fields and the person's `user_id`. Browser requests
+  may send `X-Beakr-Session`.
+- Proposals: a review flag (`POST /v1/knowledge/wiki/write` `flag`) names the
+  person and agent who filed it in `filed_by`, and stays visible to every
+  project member.
+- `GET /v1/knowledge/wiki/pages/by-title`: a title that names no page still
+  answers `404 not_found`, and `error.details.suggestions` now lists the closest
+  live page titles you can read (empty when none is close).
+- `DELETE /v1/projects/{project_id}/members/{principal_type}/{principal_id}` and
+  `DELETE /v1/labels/{label_id}/members/{user_id}`: removing the last owner
+  answers `409 last_owner` instead of `403`. The caller may manage the members;
+  another owner is needed first.
+- `DELETE /v1/conversations/{conversation_id}`: also deletes one of the caller's
+  own Beakr chats (a conversation of kind `ask_thread`) with its messages. It
+  answered `not_found` for them before. Another person's chat still answers
+  `not_found`.
 - Skills (`skills:read`, `skills:write`) join the documented API.
   `GET /v1/skills` lists every skill you can use or install: your own, your
   organization's, the built-in ones and public skills from anywhere, by name.
@@ -34,16 +59,6 @@ Each release lists the public API changes it supports, taken from the API change
   organization answers 404 here, by id or slug, while it is not installed
   here, and can be installed here only if it was installed here before.
   `marketplace` is not given to a new skill as its slug.
-- `client.skills` over these routes, on both clients: `list` (each filter takes
-  one value or several, every page followed), `get` (id or slug), `bundle`,
-  `download` (the SKILL.md folder, or its zip with `as_zip=True`), `create`
-  and `create_from_folder` (a folder, a `SKILL.md` or a `.zip`; text files
-  only), `upload_bundle` (from files, a folder or a zip, with
-  `expected_sha256`), `install`, `uninstall`, `delete`, and `proposals.list`,
-  `accept` and `dismiss`. `bundle_sha256(files)` computes the digest
-  `expected_sha256` takes. `create` answers the skill as `get` does, and a
-  retried `create` replays its `Idempotency-Key`. `list(include_content=True)`
-  pages 25 skills at a time.
 - `GET /v1/interview/sendables`: each link carries who it was sent to and how:
   `recipient_email`, `delivery_channel` (`gmail`, `outlook` or `links`), `sent_at`
   and `delivery_error`. All are null for a link that was not sent.
@@ -59,6 +74,12 @@ Each release lists the public API changes it supports, taken from the API change
   the requested one was taken, and lists the pages whose links still show the
   old title (`[[Old title]]`). Those links keep resolving to the renamed page;
   `find_replace` updates their text.
+- `POST /v1/compound/cancel`: stop the queued or running compound of an
+  imported conversation (`conversations:write`). A batch already being read
+  finishes and its proposals stay; no further batch starts, and the
+  conversation's `compound_status` reads `cancelled`. Answers
+  `nothing_to_cancel` when no compound is queued or running. `POST /v1/compound`
+  resumes from where it stopped.
 - `POST /v1/knowledge/wiki/write`: a write that stages a proposal for one
   section or card row (`edit_section`, `add_fact`, `add_connection`,
   `add_finding`, `edit_rows`) answers with `proposal`: its `id` and
@@ -83,31 +104,6 @@ Each release lists the public API changes it supports, taken from the API change
   stops applying when the table is re-sorted or another row changes; only a
   change to a row it edits supersedes it, and the first row written to a card
   section the page does not have yet is placed and accepted as it was shown.
-- `POST /v1/compound/cancel`: stop the queued or running compound of an
-  imported conversation (`conversations:write`). A batch already being read
-  finishes and its proposals stay; no further batch starts, and the
-  conversation's `compound_status` reads `cancelled`. Answers
-  `nothing_to_cancel` when no compound is queued or running. `POST /v1/compound`
-  resumes from where it stopped.
-- `engine.cancel_compound(conversation_id)` stops a compound over this route;
-  `engine.compound` resumes it.
-- `runs.start` and `runs.answer` let the agent read Knowledge by default and take
-  `knowledge=False` to turn it off. They used to send no Knowledge toggle, which
-  the server reads as off, so an answer said Knowledge was turned off for the
-  message.
-- `meta.capabilities()` reads which documented operations this server serves
-  from its own `GET /v1/public/openapi.json`, once per base URL (cached for
-  five minutes), and `Capabilities.serves(method, path)` answers for one
-  operation. A self-hosted installation serves part of the contract and
-  answers a bare 404 for the rest; a server without the document is assumed
-  to serve everything.
-- `files.upload_folder` starts the mirrored tree with a folder named after the
-  uploaded directory (`docs/`), matching the path each file records
-  (`docs/guides/a.md`); `root_folder=False` puts the directory's contents straight
-  into `folder_id` as before. Existing folders with the same name in the same
-  place are reused instead of failing, so two trees that share subfolder names
-  (two deal matters that both have `Closing/`), or the same tree uploaded again,
-  no longer stop with a 400 halfway through and leave a partial upload.
 - `GET`, `PUT` and `PATCH /v1/projects/{project_id}/knowledge-profile`: read
   and set a project's Knowledge profile, the description, goals, focus areas,
   people, organizations, topics, entity types and extraction guidance that
@@ -117,7 +113,6 @@ Each release lists the public API changes it supports, taken from the API change
   `PATCH` (the fields sent) need `kb:write` and the project's owners. A project
   with no profile answers 404 `knowledge_profile_not_found`. A
   project-restricted credential reaches its own projects' profiles.
-- `projects.knowledge_profile`, `projects.set_knowledge_profile` and `projects.update_knowledge_profile` read and set a project's Knowledge profile over these routes.
 - `POST /v1/knowledge/wiki/command` `query`: `GROUP BY value` on `facts`
   counts each value of a cell listing several (`A; B`) in each value's group,
   as `rows` `group_by=value` does; a value repeated in one cell counts once.

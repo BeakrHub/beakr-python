@@ -8,6 +8,7 @@ refresh). The sync and async clients only add the send/sleep loop.
 
 from __future__ import annotations
 
+import os
 import random
 import uuid
 from collections.abc import Callable, Mapping
@@ -116,6 +117,7 @@ class BaseClient:
         client_name: str | None = None,
         agent: str | None = None,
         run: str | None = None,
+        session: str | None = None,
         org_id: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -126,6 +128,8 @@ class BaseClient:
         self.client_name = client_name or f"sdk-python/{__version__}"
         self.agent = agent
         self.run = run
+        # Unset means the environment's; "" sends none even when BEAKR_SESSION is set.
+        self.session = os.environ.get("BEAKR_SESSION") if session is None else session
         self.org_id = resolve_org_id(org_id)
         self.timeout = timeout
         self.max_retries = max(0, max_retries)
@@ -302,6 +306,8 @@ class BaseClient:
             headers["X-Beakr-Agent"] = self.agent
         if self.run:
             headers["X-Beakr-Run"] = self.run
+        if self.session:
+            headers["X-Beakr-Session"] = self.session
         if self.org_id:
             headers["X-Org-Id"] = self.org_id
         if call.authenticated:

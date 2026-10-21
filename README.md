@@ -153,7 +153,9 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
 - **Base URL**: explicit `base_url`, `BEAKR_BASE_URL` / `BEAKR_API_URL`, the CLI
   config, then `https://api.thebeakr.com`.
 - **Headers**: `X-Beakr-Client` (`sdk-python/<version>` unless `client_name=`),
-  `X-Beakr-Agent` when `agent=` is set, and an `Idempotency-Key` on create calls.
+  `X-Beakr-Agent` when `agent=` is set, `X-Beakr-Run` when `run=` is set,
+  `X-Beakr-Session` when `session=` (default: `BEAKR_SESSION`) names the agent
+  session behind the writes, and an `Idempotency-Key` on create calls.
 - **Retries**: 429, 500, 502, 503, 504 and connection errors, with exponential
   backoff and jitter, honoring `Retry-After` (`max_retries=` to change). The
   header may be seconds or an HTTP-date (IMF-fixdate, or the obsolete RFC 850
