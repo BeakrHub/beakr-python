@@ -39,6 +39,37 @@ def test_requests_identify_client_agent_and_credential() -> None:
     assert "idempotency-key" not in headers
 
 
+# X-Beakr-Session names the agent session behind a write (a Claude Code session,
+# a Codex thread), so its provenance can say "session <id>" beside agent and run.
+@respx.mock
+def test_the_session_is_sent_from_the_option_or_beakr_session(monkeypatch) -> None:
+    from beakr_sdk import Beakr
+
+    route = respx.get(f"{BASE}/v1/me").respond(json={"user": {}})
+    monkeypatch.setenv("BEAKR_SESSION", "env-session")
+    with Beakr(api_key="bk_live_k", base_url=BASE) as b:
+        b.me.get()
+    assert route.calls.last.request.headers["x-beakr-session"] == "env-session"
+    with Beakr(api_key="bk_live_k", base_url=BASE, session="cc-123") as b:
+        b.me.get()
+    assert route.calls.last.request.headers["x-beakr-session"] == "cc-123"
+    with Beakr(api_key="bk_live_k", base_url=BASE, session="") as b:
+        b.me.get()
+    assert "x-beakr-session" not in route.calls.last.request.headers
+
+
+@respx.mock
+def test_no_session_header_without_a_session(monkeypatch) -> None:
+    from beakr_sdk import AsyncBeakr, Beakr
+
+    monkeypatch.delenv("BEAKR_SESSION", raising=False)
+    route = respx.get(f"{BASE}/v1/me").respond(json={"user": {}})
+    with Beakr(api_key="bk_live_k", base_url=BASE) as b:
+        b.me.get()
+    assert "x-beakr-session" not in route.calls.last.request.headers
+    assert AsyncBeakr(api_key="bk_live_k", base_url=BASE).session is None
+
+
 @pytest.mark.parametrize("status", [500, 502, 503, 504])
 @respx.mock
 def test_keyed_creates_are_retried_on_5xx_with_the_same_key(client, sleeps, status) -> None:

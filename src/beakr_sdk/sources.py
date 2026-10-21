@@ -27,7 +27,12 @@ wherever the source came from::
       "section": {"id", "title", "event_start", "event_end", "date_precision"},
       "excerpts": [{"citation_key", "section_id", "unit_locator", "text"}],  # compact reads
       "cited_passages": 3,                   # compact reads: passages of it the page cites
+      "filed_by": {"user_name", "agent", "client", "run", "session", "text"},
     }
+
+``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
+``user_note`` citation, by name only: never the person's ``user_id``, which the
+page sources route keeps in ``meta.filed_by``.
 
 Empty fields are left out. Backend row fields (internal unit, connector or
 version ids, hashes) are never forwarded.
@@ -42,6 +47,10 @@ __all__ = ["UPLOAD_PROVIDER", "download_hint", "public_source", "source_where"]
 
 #: ``provider`` of a source uploaded to Beakr rather than synced from a connector.
 UPLOAD_PROVIDER = "upload"
+
+#: The fields of ``filed_by`` a public record keeps, as the engine's
+#: ``citation_filer.PUBLIC_FILER_FIELDS`` plus its ``text`` line: names, never ids.
+PUBLIC_FILER_FIELDS = ("user_name", "agent", "client", "run", "session", "text")
 
 
 def public_source(source: dict[str, Any], *, citation_key: str | None = None) -> dict[str, Any]:
@@ -159,6 +168,16 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
             "tool": retrieval_tool,
             "arguments": {"handle": retrieval_args["handle"]},
         }
+    # Who wrote an inline citation; a page sources row carries it in ``meta``.
+    filed_by = first("filed_by")
+    if isinstance(filed_by, dict):
+        public_filed = {
+            field: str(filed_by[field])
+            for field in PUBLIC_FILER_FIELDS
+            if filed_by.get(field) not in (None, "")
+        }
+        if public_filed:
+            item["filed_by"] = public_filed
     return {key: value for key, value in item.items() if value not in (None, "")}
 
 
