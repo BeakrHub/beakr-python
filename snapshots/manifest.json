@@ -13,7 +13,7 @@
     },
     "beakr-typescript": {
       "repository": "BeakrHub/beakr-typescript",
-      "commit": "1ecfff054fa237b55695142147476cd6a7ef64b8",
+      "commit": "ce69f1833a30f9068ed8f0aeb3139b2d00ad7f4c",
       "uncommitted_changes": false,
       "files": {
         "src/replay.ts": "sha256:a5f9cdf59930ddc618cde15f7d5ce13ec67a9b2d166b867959156aef05a04a48"
