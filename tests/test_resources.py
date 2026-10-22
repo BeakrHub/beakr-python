@@ -483,6 +483,24 @@ def test_knowledge_refusal_raises_with_the_doors_guidance(client) -> None:
 
 
 @respx.mock
+def test_knowledge_refusal_text_names_the_code_without_an_http_status(client) -> None:
+    # ROOT CAUSE (box 0.1.8 check): the door states a refusal in a 200 body, and
+    # the base error text added "(HTTP 200, page_not_found)", which reads as if
+    # HTTP refused the call. The text names the code alone, as the CLI does.
+    respx.post(f"{BASE}/v1/knowledge/wiki/command").respond(
+        200,
+        json={
+            "content": [{"type": "text", "text": "No page 'Nope'."}],
+            "outcome": {"status": "error", "error_code": "page_not_found"},
+        },
+    )
+    with pytest.raises(KnowledgeCommandError) as caught:
+        client.knowledge.cat("Nope")
+    assert str(caught.value) == "No page 'Nope'. (page_not_found)"
+    assert "HTTP" not in str(caught.value)
+
+
+@respx.mock
 def test_knowledge_check_false_returns_the_refusal(client) -> None:
     respx.post(f"{BASE}/v1/knowledge/wiki/command").respond(
         200, json={"content": [], "outcome": {"status": "error"}}
