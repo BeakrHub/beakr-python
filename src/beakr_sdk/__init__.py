@@ -34,8 +34,10 @@ from beakr_sdk.errors import (
     NotFoundError,
     NotProvidedError,
     PermissionDeniedError,
+    PersonReviewRequiredError,
     RateLimitError,
     ServerError,
+    SessionRequiredError,
     ValidationError,
 )
 from beakr_sdk.query_spec import QuerySpec
@@ -53,11 +55,13 @@ __all__ = [
     "NotFoundError",
     "NotProvidedError",
     "PermissionDeniedError",
+    "PersonReviewRequiredError",
     "QuerySpec",
     "RateLimitError",
     "RunFailedError",
     "RunNeedsInputError",
     "ServerError",
+    "SessionRequiredError",
     "ValidationError",
     "__version__",
 ]

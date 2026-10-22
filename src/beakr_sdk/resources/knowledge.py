@@ -32,6 +32,7 @@ from beakr_sdk._typing import returns
 from beakr_sdk.errors import KnowledgeCommandError
 from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources._base import Resource, as_list
+from beakr_sdk.resources.agent_review import AgentReview
 from beakr_sdk.resources.knowledge_pages import KnowledgePages
 
 #: Seconds a research call waits for its answer, whatever the client's timeout:
@@ -126,6 +127,7 @@ class Knowledge(Resource[M]):
         super().__init__(client)
         self.proposals: Proposals[M] = Proposals(client)
         self.pages: KnowledgePages[M] = KnowledgePages(client)
+        self.agent_review: AgentReview[M] = AgentReview(client)
 
     # -- the door ------------------------------------------------------------
 

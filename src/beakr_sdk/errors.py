@@ -122,6 +122,32 @@ class PermissionDeniedError(BeakrError):
         self.required_scope = required_scope
 
 
+class PersonReviewRequiredError(PermissionDeniedError):
+    """403 ``person_review_required``: this project needs a person to accept or commit.
+
+    With agent review on (``knowledge.agent_review``), an API key or token
+    without ``proposals:accept`` may stage proposals but not accept them,
+    commit Knowledge any other way, or approve a file waiting for a person.
+    A signed-in person, or a key holding ``proposals:accept``, can.
+    """
+
+
+class SessionRequiredError(PermissionDeniedError):
+    """403 ``session_required``: only a signed-in person (a browser session) may do this.
+
+    Organization security settings, step-up and agent-review policy changes
+    refuse API keys and tokens (an agent-review change accepts a key holding
+    ``proposals:accept``).
+    """
+
+
+#: 403 codes with their own error type.
+_FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
+    "person_review_required": PersonReviewRequiredError,
+    "session_required": SessionRequiredError,
+}
+
+
 class NotFoundError(BeakrError):
     """404."""
 
@@ -405,7 +431,7 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     if status == 401:
         return AuthenticationError(message, **common)
     if status == 403:
-        return PermissionDeniedError(
+        return _FORBIDDEN_TYPES.get(str(code), PermissionDeniedError)(
             message,
             required_scope=details.get("required_scope") or envelope.get("required_scope"),
             **common,
