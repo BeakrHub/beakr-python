@@ -122,6 +122,32 @@ class PermissionDeniedError(BeakrError):
         self.required_scope = required_scope
 
 
+class PersonReviewRequiredError(PermissionDeniedError):
+    """403 ``person_review_required``: this project needs a person to accept or commit.
+
+    With agent review on (``knowledge.agent_review``), an API key or token
+    without ``proposals:accept`` may stage proposals but not accept them,
+    commit Knowledge any other way, or approve a file waiting for a person.
+    A signed-in person, or a key holding ``proposals:accept``, can.
+    """
+
+
+class SessionRequiredError(PermissionDeniedError):
+    """403 ``session_required``: only a signed-in person (a browser session) may do this.
+
+    Organization security settings, step-up and agent-review policy changes
+    refuse API keys and tokens (an agent-review change accepts a key holding
+    ``proposals:accept``).
+    """
+
+
+#: 403 codes with their own error type.
+_FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
+    "person_review_required": PersonReviewRequiredError,
+    "session_required": SessionRequiredError,
+}
+
+
 class NotFoundError(BeakrError):
     """404."""
 
@@ -137,6 +163,8 @@ class NotProvidedError(NotFoundError):
     Beakr installation does not provide <area>." ``area`` is that name, or
     ``None`` when the path belongs to no known area and the message names the
     operation (``method`` and ``path``) instead.
+    A method that looked up the active organization first names its own area
+    when that lookup is refused (:meth:`naming`).
     ``beakr.meta.capabilities().serves(method, path)`` tells the same before
     calling.
     """
@@ -154,6 +182,30 @@ class NotProvidedError(NotFoundError):
         self.area = area
         self.method = method
         self.path = path
+
+    def naming(self, area: str) -> NotProvidedError:
+        """This refusal named for ``area``: the area the caller was after.
+
+        A method that first looks up the active organization
+        (``GET /v1/me/organization``) to find what it acts on is refused at that
+        lookup on an installation without organization administration; the area
+        is the method's own (``members.list`` -> organization members), not the
+        lookup's route.
+        """
+        named = NotProvidedError(
+            f"This Beakr installation does not provide {area}.",
+            area=area,
+            method=self.method,
+            path=self.path,
+            status=self.status,
+            code=self.code,
+            request_id=self.request_id,
+            body=self.body,
+            details=self.details,
+            fix=self.fix,
+        )
+        named.response = self.response
+        return named
 
 
 class ConflictError(BeakrError):
@@ -199,12 +251,25 @@ class KnowledgeCommandError(BeakrError):
 
     The door answers HTTP 200 for a tool-level refusal (unknown page, a write
     refused on a non-card page) and states the failure in ``outcome``; ``result``
-    keeps the full response so the guidance text in it is not lost.
+    keeps the full response so the guidance text in it is not lost. ``status``
+    is 200, and ``str()`` names the code without it.
     """
 
     def __init__(self, message: str, *, result: dict[str, Any], **kwargs: Any) -> None:
         super().__init__(message, **kwargs)
         self.result = result
+
+    def __str__(self) -> str:
+        # The refusal arrived in a 200 body, so no HTTP status refused it: the
+        # code alone, as the Beakr CLI words it ("No page 'X' (page_not_found)").
+        parts = [self.message]
+        if self.code:
+            parts.append(f"({self.code})")
+        if self.fix:
+            parts.append(f"To fix: {self.fix}")
+        if self.request_id:
+            parts.append(f"[request {self.request_id}]")
+        return scrub(" ".join(parts))
 
 
 _DEFAULT_CODES = {
@@ -366,7 +431,7 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     if status == 401:
         return AuthenticationError(message, **common)
     if status == 403:
-        return PermissionDeniedError(
+        return _FORBIDDEN_TYPES.get(str(code), PermissionDeniedError)(
             message,
             required_scope=details.get("required_scope") or envelope.get("required_scope"),
             **common,
