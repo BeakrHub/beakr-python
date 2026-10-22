@@ -488,8 +488,23 @@ class Files(Resource[M]):
 
     @returns(ops.build_files_create_knowledge_from_artifact)
     def send_to_knowledge(self, artifact_id: str) -> Any:
-        """Compile the file into Knowledge (if it was uploaded without)."""
+        """Compile the file into Knowledge (if it was uploaded without).
+
+        Where a person must review agent uploads (``knowledge.agent_review``),
+        a key or token's request answers ``queue_result: waiting_for_person``
+        and the file waits for :meth:`approve_knowledge`.
+        """
         return self._run(ops.build_files_create_knowledge_from_artifact(artifact_id))
+
+    @returns(ops.build_files_approve_artifact_knowledge)
+    def approve_knowledge(self, artifact_id: str) -> Any:
+        """Compile a file that is ``waiting_for_person`` into Knowledge.
+
+        The only way a held file is compiled. Only a signed-in person or a key
+        holding ``proposals:accept`` may call it (``PersonReviewRequiredError``
+        otherwise); a file that is not waiting answers ``409 not_waiting``.
+        """
+        return self._run(ops.build_files_approve_artifact_knowledge(artifact_id))
 
     def move(self, artifact_id: str, project_id: str, *, space_id: str | None = None) -> Any:
         body = clean_body({"new_home_project_id": project_id, "new_home_space_id": space_id})

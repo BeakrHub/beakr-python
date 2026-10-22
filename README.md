@@ -173,8 +173,10 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
   accept, token exchanges, reads with a body) are never resent after an
   ambiguous failure. 501, 505 and other 4xx are never retried.
 - **Errors**: `BeakrError` with `status`, `code`, `message` and `request_id`;
-  subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`),
-  `NotFoundError` (and its subclass `NotProvidedError`, below), `ConflictError`,
+  subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`;
+  its subclasses `PersonReviewRequiredError` for `person_review_required` and
+  `SessionRequiredError` for `session_required`), `NotFoundError` (and its
+  subclass `NotProvidedError`, below), `ConflictError`,
   `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`, and
   `KnowledgeCommandError` for a knowledge command the door refused.
 - **Secrets stay out of output**: `repr()` and `str()` of the client, its
@@ -187,7 +189,9 @@ user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no ref
 - **Resources** (the documented core only): `keys`, `me`,
   `meta`, `jobs`, `organizations`, `members`, `org` (`service_accounts`),
   `external_users`, `labels`, `end_user_tokens`, `projects`, `files` (with
-  `uploads`; `upload_many` for many files), `bulk_uploads`, `folders`, `knowledge` (with `pages` and `proposals`), `runs`,
+  `uploads`; `upload_many` for many files; `approve_knowledge` for a file
+  waiting for a person), `bulk_uploads`, `folders`, `knowledge` (with `pages`,
+  `proposals` and `agent_review`), `runs`,
   `interviews`, `threads`, `conversations`, `engine` (`context`, `compound`)
   and `integrations` (with `tools` and `call_tool`).
 - **Documented routes only**: this package sends nothing outside the documented
