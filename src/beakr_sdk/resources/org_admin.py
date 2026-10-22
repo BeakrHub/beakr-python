@@ -29,6 +29,7 @@ from typing import Any, Generic
 from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
+from beakr_sdk.errors import NotProvidedError
 from beakr_sdk.resources._base import Resource, collect_pages
 
 SERVICE_ACCOUNT_ROLES = ("member", "admin", "viewer")
@@ -37,6 +38,9 @@ _UNSET: Any = object()
 
 
 class _OrgScoped(Resource[M]):
+    #: What a refusal names when the active-organization lookup is not provided.
+    _AREA = "organization administration"
+
     def _org_id_flow(self, org_id: str | None) -> Flow:
         if org_id:
             return org_id
@@ -46,7 +50,10 @@ class _OrgScoped(Resource[M]):
         tokens = getattr(getattr(client, "credential", None), "tokens", None)
         if tokens is not None and tokens.org_id:
             return str(tokens.org_id)
-        org = yield ops.build_organizations_get_active_org()
+        try:
+            org = yield ops.build_organizations_get_active_org()
+        except NotProvidedError as exc:
+            raise exc.naming(self._AREA) from None
         return str(org["id"])
 
     def _read_modify_write(
@@ -85,6 +92,8 @@ class _OrgScoped(Resource[M]):
 
 class ServiceAccounts(_OrgScoped[M]):
     """Non-human members that own scoped keys, for automation and CI."""
+
+    _AREA = "service accounts"
 
     def list(self, *, org_id: str | None = None) -> Any:
         def flow() -> Flow:
