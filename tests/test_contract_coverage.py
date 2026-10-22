@@ -50,6 +50,7 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("POST /v1/artifacts/read", lambda c: c.files.read("deals/memo.pdf", unit="p. 7")),
     ("POST /v1/artifacts/download-url", lambda c: c.files.download_link("beakr-source:v1:x")),
     ("POST /v1/artifacts/{}/knowledge", lambda c: c.files.send_to_knowledge("a1")),
+    ("POST /v1/artifacts/{}/knowledge/approve", lambda c: c.files.approve_knowledge("a1")),
     ("POST /v1/artifacts/{}/move", lambda c: c.files.move("a1", "p2")),
     ("POST /v1/runs", lambda c: c.runs.start("hi", project_id="p1")),
     ("GET /v1/runs/{}", lambda c: c.runs.get("r1")),
@@ -137,6 +138,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/knowledge/wiki/pages/{}", lambda c: c.knowledge.pages.get("pg1")),
     ("GET /v1/knowledge/wiki/pages/{}/revisions", lambda c: c.knowledge.pages.revisions("pg1")),
     ("GET /v1/knowledge/wiki/pages/{}/sources", lambda c: c.knowledge.pages.sources("pg1")),
+    ("GET /v1/knowledge/agent-review", lambda c: c.knowledge.agent_review.get()),
+    (
+        "PUT /v1/knowledge/agent-review",
+        lambda c: c.knowledge.agent_review.set(agent_proposals_need_a_person=True),
+    ),
+    (
+        "PUT /v1/knowledge/agent-review/projects/{}",
+        lambda c: c.knowledge.agent_review.set_project("p1", agent_uploads_need_a_person=True),
+    ),
     ("GET /v1/knowledge/wiki/proposals", lambda c: c.knowledge.proposals.list()),
     (
         "POST /v1/knowledge/wiki/proposals",
