@@ -84,3 +84,23 @@ def test_files_list_filters_to_files_waiting_for_a_person(client) -> None:
     assert route.calls.last.request.url.params["knowledge_status"] == "waiting_for_person"
     client.files.list(project_id="p1")
     assert "knowledge_status" not in route.calls.last.request.url.params
+
+
+@respx.mock
+def test_projects_model_refusals_reads_events_summary_and_files(client) -> None:
+    # engine #1765: per-project model refusals and fallbacks.
+    base = f"{BASE}/v1/projects/p1/model-refusals"
+    events = respx.get(base).respond(200, json={"data": [], "has_more": False})
+    summary = respx.get(f"{base}/summary").respond(200, json={"refusals": 2})
+    files = respx.get(f"{base}/files").respond(200, json={"data": [], "has_more": False})
+
+    client.projects.model_refusals.list("p1", outcome="failed", stage="compile", limit=10)
+    assert dict(events.calls.last.request.url.params) == {
+        "outcome": "failed",
+        "stage": "compile",
+        "limit": "10",
+    }
+    assert client.projects.model_refusals.summary("p1", "7d")["refusals"] == 2
+    assert summary.calls.last.request.url.params["window"] == "7d"
+    client.projects.model_refusals.files("p1", window="30d")
+    assert files.calls.last.request.url.params["window"] == "30d"
