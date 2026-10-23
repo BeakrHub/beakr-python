@@ -43,6 +43,7 @@ from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
 from beakr_sdk.resources._base import Resource
 from beakr_sdk.resources.knowledge_readiness import wait_until_ready_flow
+from beakr_sdk.resources.model_refusals import ModelRefusals
 
 _PROFILE_FIELDS = frozenset(
     {
@@ -61,6 +62,11 @@ _PROFILE_FIELDS = frozenset(
 
 
 class Projects(Resource[M]):
+    def __init__(self, client: Any) -> None:
+        super().__init__(client)
+        #: When a model refused a Knowledge stage in a project (``model_refusals``).
+        self.model_refusals: ModelRefusals[M] = ModelRefusals(client)
+
     @returns_all(ops.build_projects_list_projects)
     def list(self, *, member_only: bool | None = None) -> Any:
         """Every project the caller can see, including their personal project."""
