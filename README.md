@@ -22,7 +22,7 @@ beakr = Beakr()  # api_key=..., else BEAKR_API_KEY, else your `beakr auth login`
 
 project = beakr.projects.create("Research")
 batch = beakr.files.upload_many("docs/", project_id=project["id"])  # one batch; folders kept
-beakr.jobs.wait(batch)                                               # until it is indexed
+beakr.jobs.wait(batch)  # until it is indexed
 
 hits = beakr.knowledge.sections("launch date", scope="Research")
 card = beakr.knowledge.cat("Launch Plan", scope="Research")
@@ -30,8 +30,13 @@ found = beakr.knowledge.documents_search("who covers losses from defects", proje
 beakr.files.download_reference(found["results"][0]["source_ref"], "downloads/")
 facts = beakr.knowledge.rows(table="facts", entity="Stripe", current_only=True)
 beakr.knowledge.add_finding(
-    "Stripe", date="2026-10-01", kind="decision", text="Stay on Stripe through 2027",
-    evidence="{{doc:abc123}}", rationale="Board decision", scope="Research",
+    "Stripe",
+    date="2026-10-01",
+    kind="decision",
+    text="Stay on Stripe through 2027",
+    evidence="{{doc:abc123}}",
+    rationale="Board decision",
+    scope="Research",
 )
 
 ctx = beakr.context(project_id=project["id"], format="markdown")
@@ -42,17 +47,19 @@ ctx = beakr.context(project_id=project["id"], format="markdown")
 # until that capture reads it (hold_text=True holds it for a later
 # beakr.compound without queuing; store_full_text=True keeps it).
 imported = beakr.conversations.import_(
-    client="generic", session_id="run-42", base_index=0,
+    client="generic",
+    session_id="run-42",
+    base_index=0,
     messages=[{"role": "user", "content": "..."}, {"role": "assistant", "content": "..."}],
     compound=True,
 )
 
-for tool in beakr.integrations.tools(provider="slack"):    # your connected integrations
+for tool in beakr.integrations.tools(provider="slack"):  # your connected integrations
     print(tool["name"])
 found = beakr.integrations.call_tool("slack_search", {"query": "launch date"})
 
 link = beakr.interviews.create_link("Assay handover", questions=["Controls?"])
-print(link["url"])                                           # shown once; send it
+print(link["url"])  # shown once; send it
 ```
 
 ### Tell Knowledge what a project is about
@@ -92,10 +99,10 @@ builtin = beakr.skills.list(owner="system")
 to_install = beakr.skills.list(visibility="public", installed=False)
 
 skill = beakr.skills.create_from_folder("skills/plate-reader")  # or a .zip
-beakr.skills.download(skill["id"], "exported/")                 # exported/plate-reader/
+beakr.skills.download(skill["id"], "exported/")  # exported/plate-reader/
 beakr.skills.install(to_install[0]["id"])
 
-for proposal in beakr.skills.proposals.list():                  # drafted from your work
+for proposal in beakr.skills.proposals.list():  # drafted from your work
     beakr.skills.proposals.accept(proposal["id"])
 ```
 
@@ -115,14 +122,14 @@ from beakr_sdk.resources.knowledge_readiness import KnowledgeFailed
 
 # The batch's own files: indexing, then Knowledge.
 result = beakr.files.upload_many("docs/", project_id=project_id, wait="knowledge", timeout=1800)
-print(result["batch"]["knowledge"])     # {"queued": 0, "running": 0, "created": 41, "failed": 1, ...}
+print(result["batch"]["knowledge"])  # {"queued": 0, "running": 0, "created": 41, "failed": 1, ...}
 
 # The whole project.
-status = beakr.projects.wait_until_ready(project_id, timeout=900)   # KnowledgeTimeout if not
-for failed in status["failed_files"]:   # newest first; knowledge_failures() lists them all
+status = beakr.projects.wait_until_ready(project_id, timeout=900)  # KnowledgeTimeout if not
+for failed in status["failed_files"]:  # newest first; knowledge_failures() lists them all
     print(failed["path"], failed["error_code"], failed["reason"])
 if status["failed"]:
-    beakr.projects.retry_failed(project_id)            # or retry_failed(project_id, [file_id])
+    beakr.projects.retry_failed(project_id)  # or retry_failed(project_id, [file_id])
 
 try:
     beakr.projects.wait_until_ready(project_id, raise_on_failure=True)
@@ -138,9 +145,9 @@ Embedded mode (a backend holding a service account's key):
 
 ```python
 person = beakr.external_users.create("customer-42", name="Ada Lovelace")
-beakr.labels.add_member(label_id, person["user_id"])      # labels give it projects
+beakr.labels.add_member(label_id, person["user_id"])  # labels give it projects
 minted = beakr.end_user_tokens.mint(external_user_id=person["user_id"], scopes=["kb:read"])
-user_beakr = Beakr(api_key=minted["token"])                 # 15 minutes, no refresh
+user_beakr = Beakr(api_key=minted["token"])  # 15 minutes, no refresh
 ```
 
 `AsyncBeakr` has the same methods (`await beakr.projects.list()`).
