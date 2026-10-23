@@ -197,6 +197,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("POST /v1/projects", lambda c: c.projects.create("Platform")),
     ("DELETE /v1/projects/{}", lambda c: c.projects.delete("p1")),
     ("GET /v1/projects/{}", lambda c: c.projects.get("p1")),
+    ("GET /v1/projects/{}/model-refusals", lambda c: c.projects.model_refusals.list("p1")),
+    (
+        "GET /v1/projects/{}/model-refusals/summary",
+        lambda c: c.projects.model_refusals.summary("p1", "7d"),
+    ),
+    (
+        "GET /v1/projects/{}/model-refusals/files",
+        lambda c: c.projects.model_refusals.files("p1"),
+    ),
     ("PATCH /v1/projects/{}", lambda c: c.projects.update("p1", name="x")),
     ("POST /v1/projects/{}/invite", lambda c: c.projects.invite("p1", "ada@example.com")),
     ("GET /v1/projects/{}/members", lambda c: c.projects.members("p1")),
