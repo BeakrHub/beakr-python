@@ -303,11 +303,17 @@ class Files(Resource[M]):
         project_id: str | None,
         folder_id: str | None,
         search: str | None,
+        knowledge_status: str | None,
         limit: int,
         cursor: str | None,
     ) -> Call:
         return ops.build_files_list_artifacts(
-            project_id=project_id, folder_id=folder_id, search=search, limit=limit, cursor=cursor
+            project_id=project_id,
+            folder_id=folder_id,
+            search=search,
+            knowledge_status=knowledge_status,
+            limit=limit,
+            cursor=cursor,
         )
 
     def list(
@@ -316,15 +322,21 @@ class Files(Resource[M]):
         project_id: str | None = None,
         folder_id: str | None = None,
         search: str | None = None,
+        knowledge_status: str | None = None,
         limit: int = _DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
     ) -> Any:
-        """One page: ``{items, next_cursor, has_more}``."""
+        """One page: ``{items, next_cursor, has_more}``.
+
+        ``knowledge_status="waiting_for_person"`` lists only the files held out of
+        Knowledge until a person approves them (:meth:`approve_knowledge`).
+        """
         return self._run(
             self._list_call(
                 project_id=project_id,
                 folder_id=folder_id,
                 search=search,
+                knowledge_status=knowledge_status,
                 limit=limit,
                 cursor=cursor,
             )
@@ -336,13 +348,15 @@ class Files(Resource[M]):
         project_id: str | None = None,
         folder_id: str | None = None,
         search: str | None = None,
+        knowledge_status: str | None = None,
         page_size: int = _DEFAULT_PAGE_SIZE,
     ) -> Any:
-        """Every matching file, page by page."""
+        """Every matching file, page by page (``knowledge_status`` as in :meth:`list`)."""
         call = self._list_call(
             project_id=project_id,
             folder_id=folder_id,
             search=search,
+            knowledge_status=knowledge_status,
             limit=page_size,
             cursor=None,
         )
@@ -360,6 +374,7 @@ class Files(Resource[M]):
         unit: str | None = None,
         offset: int = 0,
         max_chars: int = 20_000,
+        project: str | None = None,
     ) -> Any:
         """Read a file's extracted text by any reference a Knowledge read hands out.
 
@@ -380,15 +395,16 @@ class Files(Resource[M]):
         and canvases are files: a Knowledge page's ``source_ref`` raises
         ``ValidationError`` (``knowledge_page``; read the page with the knowledge_base
         ``cat`` command), and a connected item's (Slack, email, calendar, Jira)
-        ``ValidationError`` (``not_a_file``).
+        ``ValidationError`` (``not_a_file``). ``project`` (an id or name) opens only
+        a file in that project; one that names no project you can read raises
+        ``NotFoundError`` naming the closest ones.
         """
         if unit:
             reference = f"{reference}#{unit}"
-        return self._run(
-            ops.build_files_read_file(
-                body={"reference": reference, "offset": offset, "max_chars": max_chars}
-            )
-        )
+        body: dict[str, Any] = {"reference": reference, "offset": offset, "max_chars": max_chars}
+        if project:
+            body["project"] = project
+        return self._run(ops.build_files_read_file(body=body))
 
     @returns(ops.build_files_get_artifact_content)
     def content(self, artifact_id: str) -> Any:

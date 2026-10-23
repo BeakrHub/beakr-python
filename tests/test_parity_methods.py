@@ -65,3 +65,22 @@ def test_files_read_sends_the_reference_with_its_unit(client) -> None:
         "offset": 40,
         "max_chars": 100,
     }
+    client.files.read("d/memo.pdf", project="Science Ingest 018")
+    assert json.loads(route.calls.last.request.content)["project"] == "Science Ingest 018"
+
+
+@respx.mock
+def test_files_list_filters_to_files_waiting_for_a_person(client) -> None:
+    # The console's Review tab paged every file to find the held ones; the list
+    # takes knowledge_status=waiting_for_person (engine Y17), as does iter.
+    route = respx.get(f"{BASE}/v1/artifacts").respond(
+        200, json={"data": [], "next_cursor": None, "has_more": False}
+    )
+    client.files.list(project_id="p1", knowledge_status="waiting_for_person")
+    params = route.calls.last.request.url.params
+    assert params["knowledge_status"] == "waiting_for_person"
+    assert params["project_id"] == "p1"
+    list(client.files.iter(project_id="p1", knowledge_status="waiting_for_person"))
+    assert route.calls.last.request.url.params["knowledge_status"] == "waiting_for_person"
+    client.files.list(project_id="p1")
+    assert "knowledge_status" not in route.calls.last.request.url.params
