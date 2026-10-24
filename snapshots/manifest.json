@@ -2,7 +2,7 @@
   "sources": {
     "beakr-engine": {
       "repository": "BeakrHub/beakr-engine",
-      "commit": "db91b417842df0418d9d003ce739ff291142a6dd",
+      "commit": "db464295df1ba867e1f286362e784ad10d67f29a",
       "uncommitted_changes": false,
       "files": {
         "beakr/api/public/compat.py": "sha256:1b89503c00b6e5451ff3ad02e8e8b8016d4dd0a5f9220717d1649d52e6deb7ee",
@@ -13,7 +13,7 @@
     },
     "beakr-typescript": {
       "repository": "BeakrHub/beakr-typescript",
-      "commit": "d0ec4f93af45b68c2bfdcc872ccde39abdda6770",
+      "commit": "8e542884bc46c66f6693594ef7df4de39a170e17",
       "uncommitted_changes": false,
       "files": {
         "src/replay.ts": "sha256:a5f9cdf59930ddc618cde15f7d5ce13ec67a9b2d166b867959156aef05a04a48"
