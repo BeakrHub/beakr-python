@@ -38,6 +38,10 @@ beakr.knowledge.add_finding(
     rationale="Board decision",
     scope="Research",
 )
+# A whole new page as a proposal: project_id (the project's id) is required here.
+beakr.knowledge.proposals.create(
+    "create", project_id=project["id"], title="Launch Plan", content="# Launch Plan\n..."
+)
 
 ctx = beakr.context(project_id=project["id"], format="markdown")
 # Private to you. To add to an imported session, send only the new messages with

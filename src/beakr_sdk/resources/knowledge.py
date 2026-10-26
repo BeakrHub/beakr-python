@@ -117,7 +117,7 @@ class Proposals(Resource[M]):
         self,
         action: str,
         *,
-        project_id: str | None = None,
+        project_id: str,
         rationale: str | None = None,
         **fields: Any,
     ) -> Any:
@@ -142,14 +142,14 @@ class Proposals(Resource[M]):
                 "for the Knowledge write door's actions."
             )
         if "scope" in fields:
-            # The route has no scope field and dropped it, which then failed with
-            # "project_id is required" (sandbox e2e, 2026-10-25). Say so up front.
+            # The route has no scope field and would drop it silently (sandbox e2e,
+            # 2026-10-25), so a project name passed as scope is refused up front.
             raise TypeError(
                 "proposals.create takes project_id (the project's id), not scope; "
                 "knowledge.write takes a project name as scope."
             )
         if not project_id:
-            raise ValueError("proposals.create needs project_id: the project the proposal is for.")
+            raise ValueError("proposals.create needs project_id: the id of the project it is for.")
         body = clean_body(
             {"action": action, "project_id": project_id, "rationale": rationale, **fields}
         )
