@@ -246,6 +246,18 @@ class BeakrUploadInterrupted(BeakrError):
         self.path = path
 
 
+class UnsafePathError(BeakrError, ValueError):
+    """A name from the server would write outside the directory a download chose.
+
+    Raised before anything is written, for a file name, skill slug or skill file
+    path that is empty, ``.`` or ``..``, absolute, holds a NUL byte, or (for a
+    single name) a path separator. It is also a ``ValueError``.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message, code="unsafe_path")
+
+
 class KnowledgeCommandError(BeakrError):
     """A knowledge door command or write returned ``outcome.status == "error"``.
 
