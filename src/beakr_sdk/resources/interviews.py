@@ -98,7 +98,13 @@ class Interviews(Resource[M]):
         expires_in_days: int | None = None,
         password: str | None = None,
     ) -> Any:
-        """A link for one person. The link's token is returned once and never replayed."""
+        """A link for one person. The link's token is returned once and never replayed.
+
+        The answer carries ``token`` and a relative ``path`` (``/i/<token>``), not
+        a full URL as :meth:`create_link` returns: the page is served by the
+        Beakr web app of the installation, so prefix ``path`` with that app's
+        address (``https://app.thebeakr.com`` for Beakr's cloud) before sending it.
+        """
         body = clean_body(
             {"label": label, "expires_in_days": expires_in_days, "password": password}
         )

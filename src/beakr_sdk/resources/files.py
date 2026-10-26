@@ -23,6 +23,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.resources._base import Resource
+from beakr_sdk.resources._destination import names_directory
 from beakr_sdk.resources._multipart_upload import multipart_upload_flow
 from beakr_sdk.resources._upload import (
     batch_entries,
@@ -432,9 +433,11 @@ class Files(Resource[M]):
     def download_reference(self, reference: str, destination: str | Path) -> Any:
         """Save the original file a reference names (a ``source_ref``, id or path).
 
-        ``destination`` may be a directory, which keeps the file's name. Returns the path.
+        ``destination`` may be a directory, which keeps the file's name: an
+        existing one, or a path ending in ``/`` that is created. Returns the path.
         """
         target = Path(destination)
+        into_directory = names_directory(destination)
 
         def flow() -> Flow:
             signed = yield ops.build_files_download_url(body={"reference": reference})
@@ -442,7 +445,7 @@ class Files(Resource[M]):
                 "GET", signed["url"], external=True, authenticated=False, response="bytes"
             )
             path = target
-            if target.is_dir():
+            if into_directory:
                 path = target / Path(str(signed.get("filename") or reference)).name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
@@ -466,8 +469,13 @@ class Files(Resource[M]):
         return {"url": signed["url"], "artifact": artifact}
 
     def download(self, artifact_id: str, destination: str | Path) -> Any:
-        """Save the original file. ``destination`` may be a directory. Returns the path."""
+        """Save the original file. Returns the path.
+
+        ``destination`` may be a directory, which keeps the file's name: an
+        existing one, or a path ending in ``/`` that is created.
+        """
         target = Path(destination)
+        into_directory = names_directory(destination)
 
         def flow() -> Flow:
             located = yield from self._download_url_flow(artifact_id)
@@ -475,7 +483,7 @@ class Files(Resource[M]):
                 "GET", located["url"], external=True, authenticated=False, response="bytes"
             )
             path = target
-            if target.is_dir():
+            if into_directory:
                 artifact = located["artifact"]
                 name = artifact.get("original_filename") or artifact.get("title") or artifact_id
                 path = target / Path(str(name)).name

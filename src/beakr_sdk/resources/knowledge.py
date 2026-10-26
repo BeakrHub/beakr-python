@@ -70,6 +70,10 @@ def _checked(result: Any) -> Any:
     return result
 
 
+#: The actions the proposals route stages (``WikiProposalCreate.action`` on the server).
+PROPOSAL_ACTIONS = frozenset({"create", "edit", "find_replace", "mv", "archive", "copy"})
+
+
 class Proposals(Resource[M]):
     """Staged knowledge writes: ``/v1/knowledge/wiki/proposals``."""
 
@@ -109,16 +113,46 @@ class Proposals(Resource[M]):
     def dismiss(self, proposal_id: str) -> Any:
         return self._run(ops.build_knowledge_dismiss_proposal(proposal_id))
 
-    def create(self, action: str, *, rationale: str | None = None, **fields: Any) -> Any:
-        """Stage a Knowledge change through the proposals route.
+    def create(
+        self,
+        action: str,
+        *,
+        project_id: str | None = None,
+        rationale: str | None = None,
+        **fields: Any,
+    ) -> Any:
+        """Stage a page-level proposal through the proposals route.
 
-        ``action`` and fields are those of the Knowledge write door (``new``,
-        ``edit``, ``archive`` ...); :meth:`Knowledge.write` is the usual way in.
-        The route also takes the CLI's proposal shapes (``create``, ``edit``,
-        ``find_replace``, ``mv``, ``archive`` with a ``summary``), for which a
-        rationale is optional.
+        ``action`` is one of ``create``, ``edit``, ``find_replace``, ``mv``,
+        ``archive`` or ``copy``, and ``project_id`` (the project's id, not its
+        name) is required. ``create`` takes ``title`` and ``content`` (the page's
+        markdown), not ``sections``; ``edit`` takes ``page`` with ``content`` or
+        ``patches``; ``find_replace`` takes ``replacements``; ``mv`` and
+        ``archive`` take ``page`` or ``pages``. A rationale is optional.
+
+        The Knowledge write door's actions (``new``, ``edit_section``,
+        ``add_fact``, ``add_finding`` ...) are not proposal actions here:
+        :meth:`Knowledge.write` takes those, accepts a project name as ``scope``,
+        and is the usual way to stage a change.
         """
-        body = clean_body({"action": action, "rationale": rationale, **fields})
+        if action not in PROPOSAL_ACTIONS:
+            raise ValueError(
+                f"Unknown proposal action {action!r}: use one of "
+                f"{', '.join(sorted(PROPOSAL_ACTIONS))}, or knowledge.write({action!r}, ...) "
+                "for the Knowledge write door's actions."
+            )
+        if "scope" in fields:
+            # The route has no scope field and dropped it, which then failed with
+            # "project_id is required" (sandbox e2e, 2026-10-25). Say so up front.
+            raise TypeError(
+                "proposals.create takes project_id (the project's id), not scope; "
+                "knowledge.write takes a project name as scope."
+            )
+        if not project_id:
+            raise ValueError("proposals.create needs project_id: the project the proposal is for.")
+        body = clean_body(
+            {"action": action, "project_id": project_id, "rationale": rationale, **fields}
+        )
         return self._run(ops.build_knowledge_create_proposal(body=body))
 
 

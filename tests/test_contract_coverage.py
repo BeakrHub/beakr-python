@@ -150,7 +150,9 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/knowledge/wiki/proposals", lambda c: c.knowledge.proposals.list()),
     (
         "POST /v1/knowledge/wiki/proposals",
-        lambda c: c.knowledge.proposals.create("archive", rationale="dup", page="Old"),
+        lambda c: c.knowledge.proposals.create(
+            "archive", project_id="p1", rationale="dup", page="Old"
+        ),
     ),
     ("GET /v1/knowledge/wiki/proposals/{}", lambda c: c.knowledge.proposals.show("wp1")),
     ("POST /v1/knowledge/wiki/proposals/{}/accept", lambda c: c.knowledge.proposals.accept("wp1")),
