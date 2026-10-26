@@ -44,7 +44,11 @@ class Keys(Resource[M]):
         never_expires: bool = False,
         client_name: str | None = None,
     ) -> Any:
-        """Create a key (web-session credentials only).
+        """Create a key. Web app only: API keys and tokens are refused (``session_required``).
+
+        Keys are made by a signed-in person (Settings > API keys), so a leaked
+        key can never mint more. This method exists for clients that hold a web
+        session; from a script, create the key in the web app and pass it in.
 
         ``scopes=None`` asks for a full-access key, listed as ``legacy`` with a
         prompt to replace it. Every key expires: in 90 days, or after

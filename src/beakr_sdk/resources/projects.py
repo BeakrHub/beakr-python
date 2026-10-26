@@ -109,6 +109,9 @@ class Projects(Resource[M]):
         """Delete the project permanently; it cannot be restored (``archive`` is reversible).
 
         Needs admin access to the project; a personal project cannot be deleted (403).
+        While the organization's authentication policy requires step-up (on by
+        default) or enterprise SSO, API keys and tokens are refused
+        (``session_required``): delete it in the web app, or ``archive`` it here.
         """
         return self._run(ops.build_projects_delete_project(project_id))
 

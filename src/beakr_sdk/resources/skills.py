@@ -29,6 +29,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
 from beakr_sdk.resources._base import Resource
+from beakr_sdk.resources._destination import names_directory
 
 __all__ = ["SKILL_MD", "SkillProposals", "Skills", "bundle_sha256", "read_skill_folder"]
 
@@ -225,16 +226,18 @@ class Skills(Resource[M]):
     def download(self, skill_id: str, destination: str | Path, *, as_zip: bool = False) -> Any:
         """Save a skill's SKILL.md folder, or its zip with ``as_zip``. Returns the path.
 
-        When ``destination`` is an existing directory the skill is saved inside
-        it, as ``<slug>/`` or ``<slug>.zip``; otherwise ``destination`` is the
-        folder (or zip file) itself.
+        When ``destination`` is a directory (an existing one, or a path ending
+        in ``/`` that is created) the skill is saved inside it, as ``<slug>/``
+        or ``<slug>.zip``; otherwise ``destination`` is the folder (or zip
+        file) itself.
         """
         target = Path(destination)
+        into_directory = names_directory(destination)
 
         def flow() -> Flow:
             if as_zip:
                 data = yield ops.build_skills_download_skill_bundle_zip(skill_id)
-                if target.is_dir():
+                if into_directory:
                     bundle = yield ops.build_skills_get_skill_bundle(skill_id)
                     path = target / f"{bundle['slug']}.zip"
                 else:
@@ -243,7 +246,7 @@ class Skills(Resource[M]):
                 path.write_bytes(data)
                 return path
             bundle = yield ops.build_skills_get_skill_bundle(skill_id)
-            folder = target / str(bundle["slug"]) if target.is_dir() else target
+            folder = target / str(bundle["slug"]) if into_directory else target
             return _write_folder(folder, bundle.get("files") or {})
 
         return self._drive(flow())
