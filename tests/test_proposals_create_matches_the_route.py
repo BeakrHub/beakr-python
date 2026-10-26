@@ -44,14 +44,33 @@ def test_a_write_door_action_is_refused_before_sending(client) -> None:
 @respx.mock
 def test_scope_is_refused_rather_than_dropped(client) -> None:
     route = respx.post(f"{BASE}/v1/knowledge/wiki/proposals")
-    with pytest.raises(TypeError, match="project_id"):
-        client.knowledge.proposals.create("create", scope="Research", title="x", content="y")
+    with pytest.raises(TypeError, match="not scope"):
+        client.knowledge.proposals.create(
+            "create", project_id="p1", scope="Research", title="x", content="y"
+        )
     assert not route.called
 
 
 @respx.mock
-def test_project_id_is_required(client) -> None:
+def test_project_id_is_a_required_keyword(client) -> None:
+    # The signature says what the route needs: project_id is keyword-only and
+    # required, so leaving it out (or passing a project name as scope instead)
+    # fails before anything is sent.
     route = respx.post(f"{BASE}/v1/knowledge/wiki/proposals")
+    with pytest.raises(TypeError, match="project_id"):
+        client.knowledge.proposals.create("archive", page="Old")  # type: ignore[call-arg]
+    with pytest.raises(TypeError, match="project_id"):
+        client.knowledge.proposals.create("create", scope="Research", title="x")  # type: ignore[call-arg]
     with pytest.raises(ValueError, match="project_id"):
-        client.knowledge.proposals.create("archive", page="Old")
+        client.knowledge.proposals.create("archive", project_id="", page="Old")
     assert not route.called
+
+
+def test_the_signature_marks_project_id_required() -> None:
+    import inspect
+
+    from beakr_sdk.resources.knowledge import Proposals
+
+    parameter = inspect.signature(Proposals.create).parameters["project_id"]
+    assert parameter.kind is inspect.Parameter.KEYWORD_ONLY
+    assert parameter.default is inspect.Parameter.empty
