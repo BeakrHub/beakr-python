@@ -160,6 +160,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ),
     ("GET /v1/knowledge/wiki/search", lambda c: c.knowledge.pages.search("binding")),
     (
+        "POST /v1/knowledge/wiki/sources/{}/{}/revert",
+        lambda c: c.knowledge.revert_source("artifact", "av1"),
+    ),
+    (
         "POST /v1/knowledge/wiki/write",
         lambda c: c.knowledge.write("archive", check=False, page="Old", rationale="dup"),
     ),

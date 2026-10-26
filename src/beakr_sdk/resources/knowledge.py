@@ -567,4 +567,30 @@ class Knowledge(Resource[M]):
             scope=scope,
         )
 
+    # -- sources ---------------------------------------------------------------
+
+    @returns(ops.build_knowledge_revert_wiki_source)
+    def revert_source(
+        self, source_type: str, source_id: str, *, project_id: str | None = None
+    ) -> Any:
+        """Undo what one source contributed to Knowledge.
+
+        For an uploaded file pass ``source_type="artifact"`` and the version UUID
+        as ``source_id``, undoing versions newest first to remove a whole file's
+        contribution. Needs ``kb:write``; a project-restricted credential must
+        pass an allowed ``project_id``.
+
+        The file's bytes are not deleted, and later edits can prevent a complete
+        undo, so HTTP 200 is not proof that every contribution went: read
+        ``status``, ``skipped``, ``conflicts`` and ``proposals`` before deleting
+        files. A ``blocked`` result can still have applied some changes, and an
+        unknown source returns ``noop``. A resend carrying the same
+        ``Idempotency-Key`` replays the original outcome for 24 hours.
+        """
+        return self._run(
+            ops.build_knowledge_revert_wiki_source(
+                source_type, source_id, project_id=project_id
+            )
+        )
+
     # -- Knowledge as resources (data, not the door's prose) ------------------
