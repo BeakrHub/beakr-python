@@ -105,7 +105,12 @@ class ServiceAccounts(_OrgScoped[M]):
         return self._drive(flow())
 
     def create(self, name: str, *, role: str = "member", org_id: str | None = None) -> Any:
-        """Create a service account. Requires a browser session (not a key or token)."""
+        """Create a service account. Web app only: API keys and tokens are refused.
+
+        The refusal is ``session_required``: an org admin creates service accounts
+        in the web app (Settings > Organization > Developer), where the account's
+        first key is shown once. A backend then works with that key.
+        """
         return self._org_call(
             org_id,
             lambda org: ops.build_service_accounts_create_service_account(
@@ -114,7 +119,11 @@ class ServiceAccounts(_OrgScoped[M]):
         )
 
     def disable(self, account_id: str, *, org_id: str | None = None) -> Any:
-        """Disable the account and revoke every key it owns."""
+        """Disable the account and revoke every key it owns.
+
+        Web app only: API keys and tokens are refused (``session_required``),
+        since one leaked admin key could otherwise switch off every integration.
+        """
         return self._org_call(
             org_id, lambda org: ops.build_service_accounts_disable_service_account(org, account_id)
         )
@@ -131,6 +140,10 @@ class ServiceAccounts(_OrgScoped[M]):
         org_id: str | None = None,
     ) -> Any:
         """Mint a scoped key owned by the service account. ``key`` is returned once.
+
+        Web app only: API keys and tokens are refused (``session_required``); keys
+        never mint keys. A backend mints short-lived end-user tokens instead
+        (``end_user_tokens.mint``).
 
         ``client_name`` is recorded on the key (a CI system, an integration);
         it defaults to this SDK's name, since the API requires one.

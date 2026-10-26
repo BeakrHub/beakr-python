@@ -141,7 +141,9 @@ except KnowledgeFailed as failed:
 early; `error_code` is one of `processing_failed`, `timed_out`,
 `concurrent_update` or `compile_failed`, and a retry is safe to repeat.
 
-Embedded mode (a backend holding a service account's key):
+Embedded mode (a backend holding a service account's key). An org admin creates
+the service account and its key in the web app (Settings > Organization >
+Developer); everything after that is the SDK:
 
 ```python
 person = beakr.external_users.create("customer-42", name="Ada Lovelace")
@@ -151,6 +153,14 @@ user_beakr = Beakr(api_key=minted["token"])  # 15 minutes, no refresh
 ```
 
 `AsyncBeakr` has the same methods (`await beakr.projects.list()`).
+
+Web app only: creating API keys, creating or disabling service accounts and
+minting their keys need a signed-in person, so an API key or token gets
+`SessionRequiredError` (`session_required`) from `keys.create`,
+`org.service_accounts.create`, `mint_key` and `disable`. While an
+organization's authentication policy requires step-up (on by default) or
+enterprise SSO, changing member roles and deleting a project are refused the
+same way. Keys never mint keys; a backend mints short-lived end-user tokens.
 
 - **Auth chain**: explicit `api_key`, `BEAKR_API_KEY`, a local dev identity
   (`BEAKR_DEV_IDENTITY` + `BEAKR_DEV_EMAIL`, or the one `beakr auth dev` saved,

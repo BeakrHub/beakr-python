@@ -38,6 +38,7 @@ from beakr_sdk.errors import (
     RateLimitError,
     ServerError,
     SessionRequiredError,
+    UnsafePathError,
     ValidationError,
 )
 from beakr_sdk.query_spec import QuerySpec
@@ -62,6 +63,7 @@ __all__ = [
     "RunNeedsInputError",
     "ServerError",
     "SessionRequiredError",
+    "UnsafePathError",
     "ValidationError",
     "__version__",
 ]

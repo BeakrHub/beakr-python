@@ -40,7 +40,12 @@ class Members(Resource[M]):
         return self._drive(flow())
 
     def set_role(self, user_id: str, role: str, *, org_id: str | None = None) -> Any:
-        """Change a member's role: owner, admin, member or viewer."""
+        """Change a member's role: owner, admin, member or viewer.
+
+        While the organization's authentication policy requires step-up (on by
+        default) or enterprise SSO, API keys and tokens are refused
+        (``session_required``): change roles in the web app.
+        """
 
         def flow() -> Flow:
             resolved = yield from self._org_id_flow(org_id)

@@ -109,6 +109,9 @@ class Projects(Resource[M]):
         """Delete the project permanently; it cannot be restored (``archive`` is reversible).
 
         Needs admin access to the project; a personal project cannot be deleted (403).
+        While the organization's authentication policy requires step-up (on by
+        default) or enterprise SSO, API keys and tokens are refused
+        (``session_required``): delete it in the web app, or ``archive`` it here.
         """
         return self._run(ops.build_projects_delete_project(project_id))
 
@@ -124,7 +127,13 @@ class Projects(Resource[M]):
         role: str | None = None,
         principal_type: str = "user",
     ) -> Any:
-        """Give a user (or group) a role in the project.
+        """Give a user, service account or group a role in the project.
+
+        A service account is added by its ``user_id`` with ``principal_type``
+        ``"user"`` (the default) or ``"service"``; either way it is listed as a
+        ``user`` with ``principal_kind`` ``service_account`` and gets the access
+        its role gives. ``"service"`` with an id that is not one of the
+        organization's service accounts is refused (422 ``validation_error``).
 
         Without ``role``, none is sent: a new member joins as ``member`` and an
         existing member keeps the role they have. Demoting the last owner is

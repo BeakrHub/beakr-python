@@ -94,6 +94,11 @@ class Runs(Resource[M]):
         wiki) while it answers. The server treats a run that does not ask for it
         as one with Knowledge turned off, so it is on unless ``knowledge=False``.
 
+        ``project_id`` scopes the run to that project and saves its new
+        conversation there, which needs member access. A caller who can only
+        read the project (a viewer, or an external user whose label grants it)
+        still gets the run, with a private conversation.
+
         ``files`` are ids of files you can read (``files.upload(...)["artifact"]["id"]``),
         given to the agent the way files attached in Beakr's chat are; the
         request fails with ``not_found`` if any is not readable.

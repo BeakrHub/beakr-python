@@ -21,14 +21,16 @@ from __future__ import annotations
 import hashlib
 import zipfile
 from collections.abc import Iterable, Mapping
-from pathlib import Path, PurePosixPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
 from beakr_sdk._calls import Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
+from beakr_sdk.errors import UnsafePathError
 from beakr_sdk.resources._base import Resource
+from beakr_sdk.resources._destination import contained, names_directory, safe_component
 
 __all__ = ["SKILL_MD", "SkillProposals", "Skills", "bundle_sha256", "read_skill_folder"]
 
@@ -62,10 +64,20 @@ def bundle_sha256(files: Mapping[str, str]) -> str:
 
 
 def _safe_relative(path: str) -> str:
-    """``path`` as a relative POSIX path inside the skill, or ``ValueError``."""
+    """``path`` as a relative POSIX path inside the skill, or ``UnsafePathError``.
+
+    ``UnsafePathError`` is also a ``ValueError``. A Windows drive (``C:/x``)
+    and a NUL byte are refused along with absolute paths and ``..``.
+    """
     pure = PurePosixPath(path.replace("\\", "/"))
-    if pure.is_absolute() or not pure.parts or ".." in pure.parts:
-        raise ValueError(f"Skill file path {path!r} leaves the skill folder.")
+    if (
+        pure.is_absolute()
+        or not pure.parts
+        or ".." in pure.parts
+        or "\0" in path
+        or PureWindowsPath(path).drive
+    ):
+        raise UnsafePathError(f"Skill file path {path!r} leaves the skill folder.")
     return pure.as_posix()
 
 
@@ -138,7 +150,10 @@ def read_skill_folder(path: str | Path) -> dict[str, str]:
 def _write_folder(folder: Path, files: Mapping[str, str]) -> Path:
     # Every path is checked before anything is written, so a bundle naming a
     # path outside the folder leaves no partial copy behind.
-    targets = {folder / _safe_relative(name): content for name, content in files.items()}
+    targets = {
+        contained(folder, _safe_relative(name), what="the skill file path"): content
+        for name, content in files.items()
+    }
     folder.mkdir(parents=True, exist_ok=True)
     for target, content in targets.items():
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -225,25 +240,36 @@ class Skills(Resource[M]):
     def download(self, skill_id: str, destination: str | Path, *, as_zip: bool = False) -> Any:
         """Save a skill's SKILL.md folder, or its zip with ``as_zip``. Returns the path.
 
-        When ``destination`` is an existing directory the skill is saved inside
-        it, as ``<slug>/`` or ``<slug>.zip``; otherwise ``destination`` is the
-        folder (or zip file) itself.
+        When ``destination`` is a directory (an existing one, or a path ending
+        in ``/`` that is created) the skill is saved inside it, as ``<slug>/``
+        or ``<slug>.zip``; otherwise ``destination`` is the folder (or zip
+        file) itself.
         """
         target = Path(destination)
+        into_directory = names_directory(destination)
 
         def flow() -> Flow:
             if as_zip:
                 data = yield ops.build_skills_download_skill_bundle_zip(skill_id)
-                if target.is_dir():
+                if into_directory:
                     bundle = yield ops.build_skills_get_skill_bundle(skill_id)
-                    path = target / f"{bundle['slug']}.zip"
+                    slug = safe_component(bundle["slug"], what="the skill slug")
+                    path = contained(target, f"{slug}.zip", what="the skill slug")
                 else:
                     path = target
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(data)
                 return path
             bundle = yield ops.build_skills_get_skill_bundle(skill_id)
-            folder = target / str(bundle["slug"]) if target.is_dir() else target
+            folder = (
+                contained(
+                    target,
+                    safe_component(bundle["slug"], what="the skill slug"),
+                    what="the skill slug",
+                )
+                if into_directory
+                else target
+            )
             return _write_folder(folder, bundle.get("files") or {})
 
         return self._drive(flow())
