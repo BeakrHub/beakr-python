@@ -72,8 +72,9 @@ class Beakr(BaseClient):
             then the CLI config, then ``https://api.thebeakr.com``.
         client_name: Sent as ``X-Beakr-Client``; defaults to ``sdk-python/<version>``.
         agent: Sent as ``X-Beakr-Agent`` to attribute writes, e.g. ``"my-bot"``.
-        run: Sent as ``X-Beakr-Run``: groups this client's Knowledge writes into one
-            run that ``knowledge.undo_run(run)`` can take back together.
+        run: Sent as ``X-Beakr-Run``: labels this client's Knowledge writes as one
+            run. Each proposal it files carries the label as ``filed_by.run``, so
+            a reviewer can see which writes belong together.
         session: Sent as ``X-Beakr-Session``: the agent session behind the writes
             (a conversation or thread id), shown on their provenance. Defaults to
             ``BEAKR_SESSION``; ``""`` sends none.

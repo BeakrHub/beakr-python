@@ -9,10 +9,11 @@ Example::
     hits = beakr.knowledge.sections("billing owner", scope="Platform")
     card = beakr.knowledge.cat("Stripe", scope="Platform")
     rows = beakr.knowledge.rows(table="facts", entity="Stripe")
+    found = beakr.knowledge.documents_search("Stripe order form renewal", project_id="Platform")
     beakr.knowledge.add_fact(
         "Stripe", attribute="contract renewal", value="2027-01-31",
-        evidence="{{doc:abc123}}", rationale="From the signed order form",
-        scope="Platform",
+        evidence=found["results"][0]["source_ref"],  # a file you uploaded
+        rationale="From the signed order form", scope="Platform",
     )
 
 A write stages a proposal (unless the user's auto-approve applies it); review it
@@ -476,6 +477,11 @@ class Knowledge(Resource[M]):
 
     def research(self, query: str, *, project_id: str | None = None, quick: bool = False) -> Any:
         """A researched, cited answer across the wiki, documents and connected services.
+
+        Show ``text``: the answer with each citation as its readable reference in
+        parentheses, such as ``(memo.pdf › p. 7)``. ``answer`` keeps the raw
+        ``{{key}}`` citation tokens, which ``sources`` resolves, for a caller that
+        renders its own citations.
 
         Waits up to :data:`RESEARCH_TIMEOUT` seconds (or the client's timeout,
         if longer): the engine allows research up to 150s. With ``quick=True``
