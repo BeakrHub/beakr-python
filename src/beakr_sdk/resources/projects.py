@@ -127,13 +127,14 @@ class Projects(Resource[M]):
         role: str | None = None,
         principal_type: str = "user",
     ) -> Any:
-        """Give a user, service account or group a role in the project.
+        """Give a user or service account a role in the project.
 
         A service account is added by its ``user_id`` with ``principal_type``
         ``"user"`` (the default) or ``"service"``; either way it is listed as a
         ``user`` with ``principal_kind`` ``service_account`` and gets the access
         its role gives. ``"service"`` with an id that is not one of the
         organization's service accounts is refused (422 ``validation_error``).
+        Groups can no longer be project members: ``"group"`` is refused (400).
 
         Without ``role``, none is sent: a new member joins as ``member`` and an
         existing member keeps the role they have. Demoting the last owner is
