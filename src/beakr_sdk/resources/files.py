@@ -74,8 +74,7 @@ def already_uploaded_outcome(batch_status: Mapping[str, Any]) -> dict[str, Any]:
     return outcome
 
 
-#: Page size for listings. Passing ``limit`` is also what makes the list route
-#: answer with the ``{items, next_cursor, has_more}`` wrapper instead of a bare list.
+#: Page size for listings, which answer ``{data, next_cursor, has_more}``.
 _DEFAULT_PAGE_SIZE = 50
 
 
@@ -327,7 +326,7 @@ class Files(Resource[M]):
         limit: int = _DEFAULT_PAGE_SIZE,
         cursor: str | None = None,
     ) -> Any:
-        """One page: ``{items, next_cursor, has_more}``.
+        """One page: ``{data, next_cursor, has_more}``.
 
         ``knowledge_status="waiting_for_person"`` lists only the files held out of
         Knowledge until a person approves them (:meth:`approve_knowledge`).

@@ -21,26 +21,31 @@ from beakr_sdk import Beakr
 beakr = Beakr()  # api_key=..., else BEAKR_API_KEY, else your `beakr auth login`
 
 project = beakr.projects.create("Research")
-batch = beakr.files.upload_many("docs/", project_id=project["id"])  # one batch; folders kept
-beakr.jobs.wait(batch)  # until it is indexed
+# One batch, folders kept. wait="knowledge" returns once its files are indexed
+# and compiled into Knowledge pages; jobs.wait(batch) would stop at indexing.
+beakr.files.upload_many("docs/", project_id=project["id"], wait="knowledge", timeout=1800)
 
 hits = beakr.knowledge.sections("launch date", scope="Research")
-card = beakr.knowledge.cat("Launch Plan", scope="Research")
-found = beakr.knowledge.documents_search("who covers losses from defects", project_id="Research")
-beakr.files.download_reference(found["results"][0]["source_ref"], "downloads/")
-facts = beakr.knowledge.rows(table="facts", entity="Stripe", current_only=True)
+print(hits["content"][0]["text"])  # ranked sections, each naming its page and section_id
+# Knowledge titles the pages it compiles: find one by meaning, then read it.
+page = beakr.knowledge.pages.search("launch plan", project_id=project["id"])["data"][0]
+card = beakr.knowledge.cat(page["id"], scope="Research")
+found = beakr.knowledge.documents_search("who covers losses from defects", project_id=project["id"])
+document = found["results"][0]  # best-matching uploaded document
+beakr.files.download_reference(document["source_ref"], "downloads/")
+facts = beakr.knowledge.rows(table="facts", entity=page["title"], current_only=True)
 beakr.knowledge.add_finding(
-    "Stripe",
+    page["title"],
     date="2026-10-01",
     kind="decision",
     text="Stay on Stripe through 2027",
-    evidence="{{doc:abc123}}",
+    evidence=document["source_ref"],  # cites the file you uploaded
     rationale="Board decision",
     scope="Research",
 )
 # A whole new page as a proposal: project_id (the project's id) is required here.
 beakr.knowledge.proposals.create(
-    "create", project_id=project["id"], title="Launch Plan", content="# Launch Plan\n..."
+    "create", project_id=project["id"], title="Launch Checklist", content="# Launch Checklist\n..."
 )
 
 ctx = beakr.context(project_id=project["id"], format="markdown")
@@ -58,9 +63,9 @@ imported = beakr.conversations.import_(
     compound=True,
 )
 
-for tool in beakr.integrations.tools(provider="slack"):  # your connected integrations
-    print(tool["name"])
-found = beakr.integrations.call_tool("slack_search", {"query": "launch date"})
+tools = [tool["name"] for tool in beakr.integrations.tools(provider="slack")]  # yours, if connected
+if "slack_search_messages" in tools:
+    messages = beakr.integrations.call_tool("slack_search_messages", {"query": "launch date"})
 
 link = beakr.interviews.create_link("Assay handover", questions=["Controls?"])
 print(link["url"])  # shown once; send it

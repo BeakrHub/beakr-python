@@ -16,7 +16,7 @@ Example::
         print(item["provider"], [p["project_id"] for p in item["projects"]])
     for tool in beakr.integrations.tools(provider="slack"):
         print(tool["name"], tool["description"])
-    found = beakr.integrations.call_tool("slack_search", {"query": "assay handover"})
+    found = beakr.integrations.call_tool("slack_search_messages", {"query": "assay handover"})
     print(found["content"])
 """
 
