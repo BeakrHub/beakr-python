@@ -38,6 +38,7 @@ from beakr_sdk.errors import (
     RateLimitError,
     ServerError,
     SessionRequiredError,
+    UnexpectedResponseError,
     UnsafePathError,
     ValidationError,
 )
@@ -63,6 +64,7 @@ __all__ = [
     "RunNeedsInputError",
     "ServerError",
     "SessionRequiredError",
+    "UnexpectedResponseError",
     "UnsafePathError",
     "ValidationError",
     "__version__",

@@ -37,6 +37,7 @@ from typing import Any
 
 from beakr_sdk import Beakr, BeakrError
 from beakr_sdk.resources.knowledge import result_text
+from beakr_sdk.sources import source_where
 
 Step = dict[str, Any]
 Model = Callable[[list[dict[str, str]], list[dict[str, Any]]], Step]
@@ -145,8 +146,7 @@ class InternalAgent:
         scope = self.project_id
         try:
             if name == "research":
-                answer = kb.research(arguments["question"], project_id=scope)
-                return str(answer.get("answer") or answer.get("content") or answer)
+                return research_text(kb.research(arguments["question"], project_id=scope))
             if name == "search":
                 return result_text(kb.sections(arguments["query"], scope=scope))
             if name == "read_page":
@@ -168,6 +168,21 @@ class InternalAgent:
             return f"{name} needs {missing.args[0]!r}."
         except BeakrError as error:
             return f"{name} failed ({error.code}): {error.message}" + _fix_hint(error)
+
+
+def research_text(result: dict[str, Any]) -> str:
+    """A research answer as a person reads it: ``text``, then where each cited document lives.
+
+    ``text`` cites inline by readable reference, ``(memo.pdf › p. 7)``, and
+    ``citations`` lists the cited documents in order of first use. ``answer`` is
+    the raw text with ``{{key}}`` citation tokens, for a caller that renders its
+    own citations: shown as it is, it prints the tokens.
+    """
+    lines = [str(result.get("text") or "")]
+    citations = result.get("citations") or []
+    if citations:
+        lines += ["", "Sources:", *(f"- {source_where(source)}" for source in citations)]
+    return "\n".join(lines)
 
 
 def _fix_hint(error: BeakrError) -> str:

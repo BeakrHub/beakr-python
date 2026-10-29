@@ -37,6 +37,23 @@ def _load():
     return module
 
 
+#: A research result as the API answers it: ``text`` cites by readable reference,
+#: ``answer`` keeps the raw ``{{key}}`` tokens that ``sources`` resolves.
+_RESEARCH = {
+    "text": "Kd is 38 nM (spr-run-0910.pdf › p. 2).",
+    "answer": "Kd is 38 nM {{rag:3f2a9c1e-7b4d10a2e}}.",
+    "citations": [
+        {
+            "name": "spr-run-0910.pdf",
+            "filename": "spr-run-0910.pdf",
+            "provider": "upload",
+            "location": {"file_id": "f-1"},
+        }
+    ],
+    "sources": {"rag:3f2a9c1e-7b4d10a2e": {"source_ref": "beakr-source:v1:x"}},
+}
+
+
 def _text(body: str) -> dict:
     return {"content": [{"type": "text", "text": body}], "outcome": {"status": "ok"}}
 
@@ -76,7 +93,7 @@ def _mock_api():
         return_value=httpx.Response(200, json=_text("Staged proposal pr-1."))
     )
     research = respx.post(f"{API}/v1/knowledge/research").mock(
-        return_value=httpx.Response(200, json={"answer": "Kd is 38 nM [1]."})
+        return_value=httpx.Response(200, json=_RESEARCH)
     )
     return context, commands, writes, research
 
@@ -162,7 +179,12 @@ def test_the_command_line_model_researches_and_answers(example, beakr) -> None:
 
     result = example.InternalAgent(beakr, example.ResearchModel()).run("What is the Kd?")
 
-    assert result.answer == "Kd is 38 nM [1]."
+    # Root cause of the regression: the example printed ``answer``, whose
+    # citations are raw ``{{rag:...}}`` tokens. It shows ``text`` and the
+    # cited documents instead.
+    assert "{{" not in result.answer
+    assert result.answer.startswith("Kd is 38 nM (spr-run-0910.pdf › p. 2).")
+    assert "Sources:\n- spr-run-0910.pdf · upload" in result.answer
     assert json.loads(research.calls[0].request.content)["query"] == "What is the Kd?"
 
 

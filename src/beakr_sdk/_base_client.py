@@ -37,6 +37,7 @@ from beakr_sdk.errors import (
     RateLimitError,
     ServerError,
     parse_retry_after,
+    unexpected_response_error,
 )
 
 if TYPE_CHECKING:
@@ -417,7 +418,11 @@ class BaseClient:
         content_type = response.headers.get("content-type", "").lower()
         if content_type and not _is_textual(content_type):
             return response.content
-        return response.json()
+        try:
+            return response.json()
+        except ValueError:
+            # An HTML page answering 200 for any path: the base URL is not a Beakr API.
+            raise unexpected_response_error(response) from None
 
     def _auth_retry_allowed(self, call: Call, response: httpx.Response, refreshed: bool) -> bool:
         """A 401 on an access token that can be refreshed gets one refresh and resend."""
