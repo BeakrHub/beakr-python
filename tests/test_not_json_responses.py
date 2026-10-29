@@ -115,3 +115,45 @@ def test_the_cli_and_scripts_see_the_same_message_through_the_client() -> None:
 
     assert "<html" not in str(raised.value)
     assert f"{API}/v1/projects answered with an HTML page" in str(raised.value)
+
+
+def test_the_address_never_carries_a_user_name_password_or_query() -> None:
+    # Security review: copy_with(query=None) kept userinfo, so a base URL with
+    # credentials in it (https://user:pass@host) printed them in the message.
+    request = httpx.Request("GET", "https://ada:s3cret@wrong.test:8443/v1/me?token=abc")
+    response = httpx.Response(
+        404, text=_PAGE, headers={"content-type": "text/html"}, request=request
+    )
+
+    error = error_from_response(response)
+
+    assert error.message.startswith("https://wrong.test:8443/v1/me answered")
+    assert "s3cret" not in str(error) and "ada" not in str(error) and "token" not in str(error)
+
+
+def test_control_characters_in_a_title_or_excerpt_are_removed() -> None:
+    # Security review: the title and excerpt are the server's text printed to a
+    # terminal; an ANSI escape sequence in them must not reach it.
+    page = "<html><title>Hi\x1b[2J\x1b]0;owned\x07 &#27;[31mthere\u202e</title></html>"
+    error = error_from_response(_html(404, page))
+    assert "\x1b" not in error.message and "\x07" not in error.message
+    assert "\u202e" not in error.message
+    assert '("Hi[2J]0;owned [31mthere")' in error.message
+
+    request = httpx.Request("GET", "https://api.test/v1/me")
+    plain = error_from_response(httpx.Response(503, text="down\x1b[31m now", request=request))
+    assert plain.message == "down[31m now"
+
+
+def test_the_title_search_reads_only_the_start_of_a_huge_body() -> None:
+    # Security review: the unbounded DOTALL pattern scanned the whole body. A
+    # title past the first 4096 characters is not looked for, and a huge
+    # body with an unterminated title is cheap.
+    late = "<html>" + " " * 5000 + "<title>Late</title></html>"
+    assert error_from_response(_html(404, late)).message.endswith(
+        "answered with an HTML page, not a Beakr API response."
+    )
+
+    huge = "<html><title>" + "x" * 5_000_000
+    error = error_from_response(_html(404, huge))
+    assert "x" * 100 not in error.message

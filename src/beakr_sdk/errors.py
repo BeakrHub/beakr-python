@@ -374,11 +374,19 @@ def _not_provided(response: httpx.Response, common: dict[str, Any]) -> NotProvid
 #: How much of a body that is not JSON an error message keeps.
 _EXCERPT_CHARS = 200
 _TITLE_CHARS = 80
-_HTML_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+#: A page's title is near its start: only this much of the body is searched,
+#: and the pattern itself is bounded, so a huge body costs no more than a small one.
+_TITLE_SEARCH_CHARS = 4096
+_HTML_TITLE = re.compile(r"<title[^>]{0,200}>(.{0,500}?)</title>", re.IGNORECASE | re.DOTALL)
 
 
 def _one_line(text: str, limit: int) -> str:
-    text = " ".join(text.split())
+    """``text`` as one short printable line.
+
+    The text is the server's, and the message reaches a terminal: control and
+    other non-printable characters (an ANSI escape sequence) are removed.
+    """
+    text = "".join(char for char in " ".join(text.split()) if char.isprintable())
     return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
 
 
@@ -388,12 +396,17 @@ def _is_html(response: httpx.Response, text: str) -> bool:
 
 
 def _answered_at(response: httpx.Response) -> str:
-    """The address that answered, without its query string; "The server" when unknown."""
+    """The address that answered, "The server" when unknown.
+
+    Rebuilt from its scheme, host, port and path only: a base URL can carry a
+    user name and password (``https://user:pass@host``) or a token in its query,
+    and an error message is printed and logged.
+    """
     try:
         url = response.request.url
     except RuntimeError:  # a response built without its request
         return "The server"
-    return str(url.copy_with(query=None, fragment=None))
+    return str(httpx.URL(scheme=url.scheme, host=url.host, port=url.port, path=url.path))
 
 
 def _not_json_reason(response: httpx.Response, text: str) -> tuple[str, str | None]:
@@ -405,7 +418,7 @@ def _not_json_reason(response: httpx.Response, text: str) -> tuple[str, str | No
     """
     if not _is_html(response, text):
         return _one_line(text, _EXCERPT_CHARS), None
-    title = _HTML_TITLE.search(text)
+    title = _HTML_TITLE.search(text, 0, _TITLE_SEARCH_CHARS)
     named = _one_line(html.unescape(title.group(1)), _TITLE_CHARS) if title else ""
     page = f'an HTML page ("{named}")' if named else "an HTML page"
     message = f"{_answered_at(response)} answered with {page}, not a Beakr API response."
