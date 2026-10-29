@@ -5,13 +5,17 @@ events keyed by citation key, and a closing ``stream_complete`` carrying the
 final text. Its citations are ``{{key}}`` tokens. :class:`AnswerBuilder` folds
 those events into::
 
-    {"text": "... lasts 300 seconds [1]. ...", "sources": [<source record>, ...],
-     "run_id": "..."}
+    {"text": "... lasts 300 seconds (runtime.md › lines 4-9). ...",
+     "sources": [<source record>, ...], "run_id": "..."}
 
-where each ``{{key}}`` became ``[n]`` in order of first use and ``sources[n-1]``
-is that citation's public source record (:mod:`beakr_sdk.sources`).
-:class:`TextStream` does the same numbering on streamed deltas, holding back
-only a token that is still being written.
+Once the run has finished, the answer is the engine's own rendering from
+``GET /v1/runs/{run_id}``: each citation shown as the readable reference in
+parentheses (``(memo.pdf › p. 7)``), and one public source record
+(:mod:`beakr_sdk.sources`) per cited document in order of first use. Only a
+server that does not send that rendering gets the answer assembled from the
+stream, with each ``{{key}}`` numbered ``[n]`` and ``sources[n-1]`` behind it.
+:class:`TextStream` numbers streamed deltas ``[n]`` per citation key, holding
+back only a token that is still being written.
 """
 
 from __future__ import annotations
@@ -171,7 +175,7 @@ class AnswerBuilder:
 
         ``run`` is the run as ``GET /v1/runs/{run_id}`` reports it after the
         stream ended. Its ``answer`` -- the engine's own rendering, text with
-        ``[n]`` citations and the cited sources in order -- is the answer when
+        readable references in parentheses and the cited sources in order -- is the answer when
         present; the streamed events only fill in what those source records
         leave out (the file id of a document Beakr holds). Without it (an older
         server) the answer is assembled from the stream. An interrupted run

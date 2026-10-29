@@ -15,7 +15,7 @@ Two ways for an agent to use Beakr with that token are shown:
 * ``answer_with_own_agent``: your own Claude agent with Beakr as tools
   (search, read, research), a minimal tool loop on the Anthropic SDK;
 * ``answer_with_beakr_agent``: Beakr's own agent, asked with ``runs.answer``
-  (the answer text with ``[n]`` citations and the cited sources).
+  (the answer text, citing by readable reference, and the cited sources).
 
 Run it with ``BEAKR_SERVICE_KEY`` (the service-account key; scopes below) and
 ``ANTHROPIC_API_KEY`` set, from a directory holding ``docs/general/`` and
@@ -219,7 +219,7 @@ def run_tool(user_beakr: Beakr, name: str, args: dict[str, Any]) -> tuple[str, b
             return result_text(user_beakr.knowledge.cat(args["page"])), False
         if name == "research":
             result = user_beakr.knowledge.research(args["question"])
-            cited = [f"[{n}] {source_where(c)}" for n, c in enumerate(result["citations"], 1)]
+            cited = [f"- {source_where(c)}" for c in result["citations"]]
             return "\n".join([str(result["text"]), *cited]), False
         return f"Unknown tool {name}", True
     except BeakrError as error:
@@ -264,12 +264,13 @@ def answer_with_own_agent(user_token: str, question: str) -> str:
 
 
 def answer_with_beakr_agent(user_token: str, question: str) -> str:
-    """Ask Beakr's agent as the user: the answer with ``[n]`` citations, then
-    where each cited source lives. With no ``project_id`` the run reads
-    everything the user can: their customer's project and General."""
+    """Ask Beakr's agent as the user: the answer, citing by readable reference
+    (``(memo.pdf › p. 7)``), then where each cited source lives. With no
+    ``project_id`` the run reads everything the user can: their customer's
+    project and General."""
     user_beakr = Beakr(api_key=user_token)
     answer = user_beakr.runs.answer(question)
-    cited = [f"[{n}] {source_where(source)}" for n, source in enumerate(answer["sources"], 1)]
+    cited = [f"- {source_where(source)}" for source in answer["sources"]]
     return "\n".join([answer["text"], *cited])
 
 

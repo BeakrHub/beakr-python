@@ -3,9 +3,9 @@
 Example::
 
     answer = beakr.runs.answer("What changed in Platform this week?", project_id=project_id)
-    print(answer["text"])                       # citations rendered as [1], [2], ...
-    for n, source in enumerate(answer["sources"], 1):
-        print(n, source["name"], source.get("location", {}))
+    print(answer["text"])                       # citations as (memo.pdf › p. 7)
+    for source in answer["sources"]:
+        print(source["name"], source.get("location", {}))
 
     # Or show the answer as it is written:
     run = beakr.runs.start("What changed in Platform this week?", project_id=project_id)
@@ -156,10 +156,13 @@ class Runs(Resource[M]):
     ) -> Any:
         """Ask the agent and wait for its answer: ``{text, sources, run_id}``.
 
-        ``text`` is the final answer with each citation rendered as ``[n]``;
-        ``sources[n-1]`` is that citation's public source record
+        ``text`` is the final answer with each citation shown as the readable
+        reference in parentheses (``(memo.pdf › p. 7)``); ``sources`` lists the
+        cited documents in order of first use, as public source records
         (:mod:`beakr_sdk.sources`): name, filename, provider, where the
-        original lives, and the excerpt the agent read. Raises
+        original lives, and the excerpt the agent read. From a server that does
+        not render answers, citations are numbered ``[n]`` and ``sources[n-1]``
+        is the record behind ``[n]``. Raises
         :class:`~beakr_sdk.answers.RunFailedError` when the run ends ``error``,
         ``failed`` or ``cancelled``, and :class:`~beakr_sdk.answers.RunNeedsInputError`
         (with the run's ``question``) when the agent stopped to ask the person
