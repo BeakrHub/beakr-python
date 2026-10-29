@@ -15,6 +15,12 @@ Routes that predate the envelope send ``detail`` only, so every field falls
 back: the message to ``detail``, the request id to the ``X-Request-Id`` response
 header, and the code to one derived from status.
 
+A body that is not JSON never becomes the message as it is: an HTML page (a
+web app, a proxy or a server that is not Beakr, at a wrong base URL) is named
+by its address and title, with a fix that says to check the API URL, and other
+text is cut to a short excerpt. A success status whose body is not the JSON the
+operation answers raises :class:`UnexpectedResponseError`.
+
 A 404 whose body is the router's bare ``{"detail": "Not Found"}`` (no
 envelope) is a route this server does not have, not a missing record: a
 self-hosted installation leaves out skills, integrations, organization
@@ -27,6 +33,7 @@ message.
 
 from __future__ import annotations
 
+import html
 import json
 import re
 from datetime import datetime, timezone
@@ -246,6 +253,15 @@ class BeakrUploadInterrupted(BeakrError):
         self.path = path
 
 
+class UnexpectedResponseError(BeakrError):
+    """A success status whose body is not the JSON the operation answers.
+
+    Most often the base URL is not a Beakr API: a web app or a proxy answers
+    200 with an HTML page for any path. ``status`` is that status, and the
+    message names the address that answered.
+    """
+
+
 class UnsafePathError(BeakrError, ValueError):
     """A name from the server would write outside the directory a download chose.
 
@@ -355,6 +371,80 @@ def _not_provided(response: httpx.Response, common: dict[str, Any]) -> NotProvid
     )
 
 
+#: How much of a body that is not JSON an error message keeps.
+_EXCERPT_CHARS = 200
+_TITLE_CHARS = 80
+_HTML_TITLE = re.compile(r"<title[^>]*>(.*?)</title>", re.IGNORECASE | re.DOTALL)
+
+
+def _one_line(text: str, limit: int) -> str:
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 3].rstrip() + "..."
+
+
+def _is_html(response: httpx.Response, text: str) -> bool:
+    content_type = response.headers.get("content-type", "").lower()
+    return "html" in content_type or text.lstrip()[:1] == "<"
+
+
+def _answered_at(response: httpx.Response) -> str:
+    """The address that answered, without its query string; "The server" when unknown."""
+    try:
+        url = response.request.url
+    except RuntimeError:  # a response built without its request
+        return "The server"
+    return str(url.copy_with(query=None, fragment=None))
+
+
+def _not_json_reason(response: httpx.Response, text: str) -> tuple[str, str | None]:
+    """The message, and the fix, for a body that is not JSON.
+
+    An HTML page where a Beakr API answer was expected means the base URL points
+    somewhere else (or, for a 5xx, a proxy in front of the API answered). The page
+    itself is never the message: it is long, and it says nothing about Beakr.
+    """
+    if not _is_html(response, text):
+        return _one_line(text, _EXCERPT_CHARS), None
+    title = _HTML_TITLE.search(text)
+    named = _one_line(html.unescape(title.group(1)), _TITLE_CHARS) if title else ""
+    page = f'an HTML page ("{named}")' if named else "an HTML page"
+    message = f"{_answered_at(response)} answered with {page}, not a Beakr API response."
+    if response.status_code >= 500:
+        fix = (
+            "If the API URL (base_url, or BEAKR_BASE_URL) is right, a proxy in front of "
+            "the API answered: retry shortly."
+        )
+    else:
+        fix = (
+            "Check the API URL (base_url, or BEAKR_BASE_URL): it must be a Beakr API, "
+            "such as https://api.thebeakr.com."
+        )
+    return message, fix
+
+
+def unexpected_response_error(response: httpx.Response) -> UnexpectedResponseError:
+    """The error for a success response whose body is not the JSON its operation answers."""
+    text = response.text
+    if _is_html(response, text):
+        message, fix = _not_json_reason(response, text)
+    else:
+        message = (
+            f"{_answered_at(response)} answered HTTP {response.status_code} with a body that "
+            f'is not JSON ("{_one_line(text, _EXCERPT_CHARS)}").'
+        )
+        fix = "Check the API URL (base_url, or BEAKR_BASE_URL): it must be a Beakr API."
+    error = UnexpectedResponseError(
+        message,
+        status=response.status_code,
+        code="unexpected_response",
+        request_id=response.headers.get("x-request-id"),
+        body=text,
+        fix=fix,
+    )
+    error.response = response
+    return error
+
+
 def parse_retry_after(value: str | None, *, now: datetime | None = None) -> float | None:
     """Seconds to wait from a ``Retry-After`` header, or ``None`` when absent or malformed.
 
@@ -419,6 +509,10 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     code = envelope.get("code") or _DEFAULT_CODES.get(status)
     if code is None and status >= 500:
         code = "internal_error"
+    fix = envelope.get("fix")
+    if isinstance(body, str):
+        # Not JSON: an HTML page (a wrong base URL, a proxy) or bare text.
+        detail, fix = _not_json_reason(response, body)
     message = (
         envelope.get("message")
         or _detail_message(detail)
@@ -428,7 +522,6 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     request_id = envelope.get("request_id") or response.headers.get("x-request-id")
     details = envelope.get("details")
     details = details if isinstance(details, dict) else {}
-    fix = envelope.get("fix")
     common: dict[str, Any] = {
         "status": status,
         "code": code,

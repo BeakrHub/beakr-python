@@ -176,8 +176,9 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   which is only used for the API it was saved for), the CLI's device-flow login
   (refreshed and re-saved automatically), the CLI's saved key, then the service
   account file.
-- **Base URL**: explicit `base_url`, `BEAKR_BASE_URL` / `BEAKR_API_URL`, the CLI
-  config, then `https://api.thebeakr.com`.
+- **Base URL**: explicit `base_url`, `BEAKR_BASE_URL` (`BEAKR_API_URL` also
+  works, read after it), the CLI config, then
+  `https://api.thebeakr.com`.
 - **Headers**: `X-Beakr-Client` (`sdk-python/<version>` unless `client_name=`),
   `X-Beakr-Agent` when `agent=` is set, `X-Beakr-Run` when `run=` is set,
   `X-Beakr-Session` when `session=` (default: `BEAKR_SESSION`) names the agent
@@ -203,8 +204,12 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   its subclasses `PersonReviewRequiredError` for `person_review_required` and
   `SessionRequiredError` for `session_required`), `NotFoundError` (and its
   subclass `NotProvidedError`, below), `ConflictError`,
-  `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`, and
-  `KnowledgeCommandError` for a knowledge command the door refused.
+  `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`,
+  `KnowledgeCommandError` for a knowledge command the door refused, and
+  `UnexpectedResponseError` for a success whose body is not JSON. A body that is
+  not JSON is never the message: an HTML page (a base URL that is not a Beakr
+  API, or a proxy in front of it) is named by its address and title, with a
+  `fix` saying to check the base URL, and other text is cut to a short excerpt.
 - **Secrets stay out of output**: `repr()` and `str()` of the client, its
   `credential`, a stored sign-in, a service-account file, a request and an
   error show an API key, access or refresh token or `Authorization` header
