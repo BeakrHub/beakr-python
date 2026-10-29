@@ -41,7 +41,6 @@ async def test_research_preserves_server_metadata_in_both_clients():
         "not_checked": "others",
         "stopped_early": True,
         "cost_usd": None,
-        "lead_model": "gpt-5.6-sol",
     }
     with respx.mock:
         respx.post("https://api.test/v1/knowledge/research").mock(
