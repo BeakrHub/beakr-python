@@ -2,18 +2,18 @@
   "sources": {
     "beakr-engine": {
       "repository": "BeakrHub/beakr-engine",
-      "commit": "d6344744c4c529c866ee9f079870843e326cc1e8",
+      "commit": "65e1985988759f4b2d195ed7a45c3566ed80c4a6",
       "uncommitted_changes": false,
       "files": {
         "beakr/api/public/compat.py": "sha256:1b89503c00b6e5451ff3ad02e8e8b8016d4dd0a5f9220717d1649d52e6deb7ee",
         "derived/replaying-creates.json": "sha256:0c487e478b16eb5a19cbe11c4d374205699de55f986f8a61c0b55b68968dc9e4",
-        "docs/api/CHANGELOG.md": "sha256:eb9d1ff03fe9abb3d3af719ffaff9614a732b8341d7f79a3392b1460d122b793",
-        "docs/api/public-openapi.json": "sha256:ddaec2023af551c4669a9335b0ebacebfd45e24a667f1c182a3f012f05dc4abf"
+        "docs/api/CHANGELOG.md": "sha256:956a383b18e45c15513d3ec52af152d4428154435b70ca6e9a09757bb6b42826",
+        "docs/api/public-openapi.json": "sha256:e3e08b3d2c8bed9ff629ee59fa2d95d6267e2451b105aa3cfd7980cecb1d2f9a"
       }
     },
     "beakr-typescript": {
       "repository": "BeakrHub/beakr-typescript",
-      "commit": "d596111143b38f41992102c282a0b96250d58b76",
+      "commit": "2272e6f6fb0a9adcce58471f6e86cd508cb93cfe",
       "uncommitted_changes": false,
       "files": {
         "src/replay.ts": "sha256:83fdc90a946f10a176c58da4f01d4aaa1f64309e3d73fd42b5c8a2b67ce1fef5"
