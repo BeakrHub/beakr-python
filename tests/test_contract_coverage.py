@@ -35,6 +35,15 @@ from tests._engine import engine_checkout
 EXTERNAL_USER = "5b1f6c2e-8d3a-4e7b-9c1d-2a3b4c5d6e7f"
 
 BASE = "https://api.test"
+
+
+def _sent_then_refused(call: Callable[[], Any]) -> None:
+    from beakr_sdk.errors import UnexpectedResponseError
+
+    with pytest.raises(UnexpectedResponseError):
+        call()
+
+
 _REPO = Path(__file__).resolve().parents[1]
 
 ORG = "org1"
@@ -106,6 +115,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.end_user_tokens.mint(subject="u1", project_ids=["p1"], scopes=["kb:read"]),
     ),
     ("GET /v1/auth/end-user-tokens", lambda c: c.end_user_tokens.list(subject="u1")),
+    # The mocked answer carries no token, so building the scoped client refuses
+    # after the request went out (tests/test_sessions.py covers the real answer).
+    ("POST /v1/sessions", lambda c: _sent_then_refused(lambda: c.sessions.create(read=["p1"]))),
+    ("GET /v1/sessions", lambda c: c.sessions.list()),
+    ("GET /v1/sessions/current", lambda c: c.sessions.current()),
+    ("GET /v1/sessions/{}", lambda c: c.sessions.get("s1")),
+    ("PATCH /v1/sessions/{}", lambda c: c.sessions.update("s1", read=["p1"])),
+    ("POST /v1/sessions/{}/end", lambda c: c.sessions.end("s1")),
+    ("POST /v1/sessions/{}/tokens", lambda c: c.sessions.mint_token("s1")),
     ("DELETE /v1/auth/end-user-tokens/{}", lambda c: c.end_user_tokens.revoke("t1")),
     (
         "GET /v1/organizations/{}/external-users",

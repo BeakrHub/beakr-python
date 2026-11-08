@@ -44,6 +44,7 @@ CORE_RESOURCES = {
     "organizations",
     "projects",
     "runs",
+    "sessions",
     "skills",
     "threads",
 }

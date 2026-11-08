@@ -28,6 +28,7 @@ from beakr_sdk.resources.org_admin import OrgAdmin
 from beakr_sdk.resources.organizations import Organizations
 from beakr_sdk.resources.projects import Projects
 from beakr_sdk.resources.runs import Runs, Threads
+from beakr_sdk.resources.sessions import Sessions
 from beakr_sdk.resources.skills import Skills
 
 __all__ = ["attach_resources"]
@@ -48,6 +49,8 @@ def attach_resources(client: Any) -> None:
     client.external_users = ExternalUsers(client)
     client.labels = Labels(client)
     client.end_user_tokens = EndUserTokens(client)
+    # Agent sessions confined to the projects a person chooses.
+    client.sessions = Sessions(client)
     # Projects and files
     client.projects = Projects(client)
     client.files = Files(client)

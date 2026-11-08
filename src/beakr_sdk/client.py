@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.organizations import Organizations
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
+    from beakr_sdk.resources.sessions import Sessions
     from beakr_sdk.resources.skills import Skills
 
 
@@ -94,6 +95,7 @@ class Beakr(BaseClient):
     external_users: ExternalUsers[Sync]
     labels: Labels[Sync]
     end_user_tokens: EndUserTokens[Sync]
+    sessions: Sessions[Sync]
     projects: Projects[Sync]
     files: Files[Sync]
     bulk_uploads: BulkUploads[Sync]
@@ -205,6 +207,9 @@ class Beakr(BaseClient):
     # -- execution ---------------------------------------------------------
 
     def _refresh(self, stale_access_token: str | None) -> None:
+        if self._session_renewal is not None:
+            self._renew_session_token()
+            return
         with self._refresh_lock:
             tokens = self.credential.tokens
             # Another thread refreshed while this one waited for the lock.
@@ -226,6 +231,16 @@ class Beakr(BaseClient):
         except BeakrError as exc:
             self._settle_failed_refresh(exc)
         self._apply_refreshed_tokens(data)
+
+    def _renew_session_token(self) -> None:
+        renewal = self._session_renewal
+        assert renewal is not None
+        seen = self.credential.token
+        with self._refresh_lock:
+            # Another thread renewed while this one waited for the lock.
+            if self.credential.token != seen and not renewal.due():
+                return
+            renewal.renew(self)
 
     def _current_access_token(self) -> str | None:
         tokens = self.credential.tokens
