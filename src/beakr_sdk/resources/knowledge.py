@@ -475,20 +475,25 @@ class Knowledge(Resource[M]):
         }
         return self.documents("search", project_id=project_id, **arguments)
 
-    def research(self, query: str, *, project_id: str | None = None, quick: bool = False) -> Any:
-        """A researched, cited answer across the wiki, documents and connected services.
+    def research(self, query: str, *, project_id: str | None = None, quick: bool = True) -> Any:
+        """A cited answer from Knowledge and documents; ``quick=False`` for the full researcher.
 
         Show ``text``: the answer with each citation as its readable reference in
         parentheses, such as ``(memo.pdf › p. 7)``. ``answer`` keeps the raw
         ``{{key}}`` citation tokens, which ``sources`` resolves, for a caller that
         renders its own citations.
 
-        Waits up to :data:`RESEARCH_TIMEOUT` seconds (or the client's timeout,
-        if longer): the engine allows research up to 150s. With ``quick=True``
-        the engine answers within 15 seconds from one search of Knowledge and
-        uploaded documents (no connected services); the answer's ``engine`` is
-        ``quick`` and ``stopped_early`` is true when it is the cited results
-        without a written summary.
+        Quick by default: the engine answers within 15 seconds from one search
+        of Knowledge and uploaded documents (no connected services); the
+        answer's ``engine`` is ``quick`` and ``stopped_early`` is true when it is
+        the cited results without a written summary. Waits up to
+        :data:`QUICK_RESEARCH_TIMEOUT` seconds.
+
+        ``quick=False`` runs the full researcher, which also reads connected
+        services (Slack, Drive, Gmail, Calendar, Jira): for questions about
+        those services and exhaustive questions. It waits up to
+        :data:`RESEARCH_TIMEOUT` seconds (or the client's timeout, if longer):
+        the engine allows it up to 150s.
         """
         body = clean_body({"query": query, "project_id": project_id, "quick": quick or None})
         call = ops.build_knowledge_research(body=body)
