@@ -5,6 +5,8 @@ agentic loop that reads documents from connected services), but every call used
 the client's timeout, 60s by default, so a slow research answer was abandoned
 as a timeout while the engine was still producing it. Research now waits at
 least ``RESEARCH_TIMEOUT`` (170s); other calls keep the client's timeout.
+Research is quick by default (2026-11-08), so these call the full researcher
+with ``quick=False``; a quick call waits ``QUICK_RESEARCH_TIMEOUT``.
 """
 
 from __future__ import annotations
@@ -29,7 +31,7 @@ def test_research_outwaits_the_engines_route_timeout() -> None:
         200, json={"data": [], "next_cursor": None, "has_more": False}
     )
     with Beakr(api_key="bk_live_x", base_url=BASE) as beakr:
-        beakr.knowledge.research("What changed?")
+        beakr.knowledge.research("What changed?", quick=False)
         beakr.projects.list()
     assert RESEARCH_TIMEOUT > 150
     assert _read_timeout(research) == RESEARCH_TIMEOUT
@@ -40,7 +42,7 @@ def test_research_outwaits_the_engines_route_timeout() -> None:
 def test_a_longer_client_timeout_still_wins() -> None:
     research = respx.post(f"{BASE}/v1/knowledge/research").respond(200, json={"text": "ok"})
     with Beakr(api_key="bk_live_x", base_url=BASE, timeout=300.0) as beakr:
-        beakr.knowledge.research("What changed?")
+        beakr.knowledge.research("What changed?", quick=False)
     assert _read_timeout(research) == 300.0
 
 
@@ -49,5 +51,5 @@ def test_a_longer_client_timeout_still_wins() -> None:
 async def test_the_async_client_waits_as_long() -> None:
     research = respx.post(f"{BASE}/v1/knowledge/research").respond(200, json={"text": "ok"})
     async with AsyncBeakr(api_key="bk_live_x", base_url=BASE) as beakr:
-        await beakr.knowledge.research("What changed?")
+        await beakr.knowledge.research("What changed?", quick=False)
     assert _read_timeout(research) == RESEARCH_TIMEOUT

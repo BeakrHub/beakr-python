@@ -350,7 +350,7 @@ CASES: list[tuple[str, Any, str, str, dict[str, str], Any]] = [
         "POST",
         "/v1/knowledge/research",
         {},
-        {"query": "why?", "project_id": "p1"},
+        {"query": "why?", "project_id": "p1", "quick": True},
     ),
     (
         "conv import",
