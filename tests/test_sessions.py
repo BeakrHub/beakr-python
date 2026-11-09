@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import httpx
 import pytest
@@ -21,7 +21,7 @@ from .conftest import BASE
 
 
 def _iso(delta: timedelta) -> str:
-    return (datetime.now(UTC) + delta).isoformat()
+    return (datetime.now(timezone.utc) + delta).isoformat()
 
 
 def _session(status: str = "active", **extra) -> dict:
