@@ -60,6 +60,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.organizations import Organizations
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
+    from beakr_sdk.resources.sessions import SessionRenewal, Sessions
 
 DEFAULT_TIMEOUT = 60.0
 DEFAULT_MAX_RETRIES = 2
@@ -99,6 +100,7 @@ class BaseClient:
     external_users: ExternalUsers
     labels: Labels
     end_user_tokens: EndUserTokens
+    sessions: Sessions
     projects: Projects
     files: Files
     bulk_uploads: BulkUploads
@@ -139,6 +141,9 @@ class BaseClient:
         self._token_store = token_store or TokenStore()
         self._explicit_api_key = api_key
         self._credential: Credential | None = None
+        #: Set on a session's scoped client (``resources.sessions``): renews its
+        #: ``bk_st_`` token through the client that started the session.
+        self._session_renewal: SessionRenewal | None = None
         #: Injectable so tests can pin the clock an HTTP-date ``Retry-After`` is
         #: measured against.
         self._now: Callable[[], datetime] = _utc_now
@@ -253,6 +258,8 @@ class BaseClient:
         ) from exc
 
     def _needs_proactive_refresh(self) -> bool:
+        if self._session_renewal is not None:
+            return self._session_renewal.due()
         credential = self.credential
         return credential.tokens is not None and credential.tokens.access_expired()
 
@@ -431,7 +438,7 @@ class BaseClient:
             and call.authenticated
             and not call.external
             and not refreshed
-            and self.credential.can_refresh
+            and (self.credential.can_refresh or self._session_renewal is not None)
         )
 
 

@@ -148,10 +148,45 @@ class SessionRequiredError(PermissionDeniedError):
     """
 
 
+class _SessionScopeError(PermissionDeniedError):
+    """A refusal about a session's projects; ``picker_url`` is where the person changes them."""
+
+    @property
+    def picker_url(self) -> str | None:
+        value = self.details.get("picker_url")
+        return value if isinstance(value, str) else None
+
+
+class SessionNeedsSelectionError(_SessionScopeError):
+    """403 ``session_needs_selection``: the person has not chosen this session's projects yet.
+
+    Show them ``picker_url``; the session works from the request after they choose.
+    """
+
+
+class SessionWriteScopeError(_SessionScopeError):
+    """403 ``session_write_scope``: the session may read this project but not write it.
+
+    ``write_project_ids`` lists the projects it may write.
+    """
+
+    @property
+    def write_project_ids(self) -> list[str]:
+        value = self.details.get("write_project_ids")
+        return [str(v) for v in value] if isinstance(value, list) else []
+
+
+class SessionWidenRefusedError(_SessionScopeError):
+    """403 ``session_widen_refused``: a session token can only drop projects, never add them."""
+
+
 #: 403 codes with their own error type.
 _FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
     "person_review_required": PersonReviewRequiredError,
     "session_required": SessionRequiredError,
+    "session_needs_selection": SessionNeedsSelectionError,
+    "session_write_scope": SessionWriteScopeError,
+    "session_widen_refused": SessionWidenRefusedError,
 }
 
 

@@ -67,6 +67,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.organizations import Organizations
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
+    from beakr_sdk.resources.sessions import Sessions
     from beakr_sdk.resources.skills import Skills
 
 
@@ -133,6 +134,7 @@ class AsyncBeakr(BaseClient):
     external_users: ExternalUsers[Async]
     labels: Labels[Async]
     end_user_tokens: EndUserTokens[Async]
+    sessions: Sessions[Async]
     projects: Projects[Async]
     files: Files[Async]
     bulk_uploads: BulkUploads[Async]
@@ -214,6 +216,9 @@ class AsyncBeakr(BaseClient):
     # -- execution ---------------------------------------------------------
 
     async def _refresh(self, stale_access_token: str | None) -> None:
+        if self._session_renewal is not None:
+            await self._renew_session_token()
+            return
         async with self._refresh_lock:
             tokens = self.credential.tokens
             if tokens is not None and tokens.access_token != stale_access_token:
@@ -229,6 +234,16 @@ class AsyncBeakr(BaseClient):
                 await self._refresh_now()
             finally:
                 acquisition.abandon()
+
+    async def _renew_session_token(self) -> None:
+        renewal = self._session_renewal
+        assert renewal is not None
+        seen = self.credential.token
+        async with self._refresh_lock:
+            # Another task renewed while this one waited for the lock.
+            if self.credential.token != seen and not renewal.due():
+                return
+            await renewal.renew_async(self)
 
     async def _refresh_now(self) -> None:
         self._assert_refreshable()
