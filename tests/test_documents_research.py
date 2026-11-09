@@ -53,7 +53,7 @@ async def test_research_preserves_server_metadata_in_both_clients():
 
 
 @pytest.mark.parametrize("timeout, expected", [(None, 170.0), (220.0, 220.0)])
-def test_research_waits_for_server_and_preserves_longer_client_timeout(timeout, expected):
+def test_full_research_waits_for_server_and_preserves_longer_client_timeout(timeout, expected):
     with respx.mock:
         route = respx.post("https://api.test/v1/knowledge/research").mock(
             return_value=Response(200, json={"text": "ok"})
@@ -63,22 +63,25 @@ def test_research_waits_for_server_and_preserves_longer_client_timeout(timeout, 
             base_url="https://api.test",
             **({"timeout": timeout} if timeout is not None else {}),
         ) as client:
-            client.knowledge.research("q")
+            client.knowledge.research("q", quick=False)
     assert route.calls[0].request.extensions["timeout"]["read"] == expected
 
 
 @pytest.mark.asyncio
-async def test_quick_research_sends_quick_and_waits_less_in_both_clients():
+async def test_research_is_quick_by_default_and_waits_less_in_both_clients():
+    # Decision (2026-11-08): research is quick unless the caller passes
+    # quick=False, which runs the full researcher (connected services, 150s).
     with respx.mock:
         route = respx.post("https://api.test/v1/knowledge/research").mock(
             return_value=Response(200, json={"text": "ok", "engine": "quick"})
         )
         with Beakr(api_key="test", base_url="https://api.test", timeout=5.0) as client:
-            assert client.knowledge.research("q", quick=True)["engine"] == "quick"
+            assert client.knowledge.research("q")["engine"] == "quick"
         async with AsyncBeakr(api_key="test", base_url="https://api.test") as client:
             await client.knowledge.research("q", quick=True)
         with Beakr(api_key="test", base_url="https://api.test") as client:
-            client.knowledge.research("q")
+            client.knowledge.research("q", quick=False)
     sent = [json.loads(call.request.content) for call in route.calls]
     assert sent == [{"query": "q", "quick": True}, {"query": "q", "quick": True}, {"query": "q"}]
     assert route.calls[0].request.extensions["timeout"]["read"] == 30.0
+    assert route.calls[2].request.extensions["timeout"]["read"] == 170.0
