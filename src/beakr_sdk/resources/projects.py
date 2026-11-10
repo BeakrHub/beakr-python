@@ -22,6 +22,18 @@ Knowledge profile (what Knowledge should understand about the project)::
     beakr.projects.update_knowledge_profile(project_id, entity_types=["batch", "deviation"])
     profile = beakr.projects.knowledge_profile(project_id)
 
+Or set it up with Beakr's agent, a conversation it leads (entity types first)::
+
+    run = beakr.projects.start_profile_setup(project_id, "Set up this project's profile.")
+    for chunk in beakr.runs.stream_text(run["run_id"]):
+        print(chunk, end="")
+    # Reply in the same thread; answer a question the run parked on with answer=True.
+    beakr.projects.start_profile_setup(project_id, "Lots", thread_id=run["thread_id"])
+
+A project created while its organization requires a profile takes no files or
+Knowledge until it has one: those calls raise ``ProjectProfileRequiredError``
+(409 ``project_profile_required``).
+
 Knowledge readiness::
 
     status = beakr.projects.wait_until_ready(project_id, timeout=900)
@@ -34,10 +46,11 @@ Knowledge readiness::
 from __future__ import annotations
 
 import builtins
+import uuid
 from collections.abc import Callable
 from typing import Any
 
-from beakr_sdk._calls import clean_body
+from beakr_sdk._calls import adjusted, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
@@ -292,6 +305,54 @@ class Projects(Resource[M]):
             }
         )
         return self._run(ops.build_projects_put_project_knowledge_profile(project_id, body=body))
+
+    def start_profile_setup(
+        self,
+        project_id: str,
+        message: str,
+        *,
+        thread_id: str | None = None,
+        answer: bool = False,
+        required: bool = False,
+        idempotency_key: str | None = None,
+    ) -> Any:
+        """Start, or continue, a profile-setup conversation with Beakr's agent.
+
+        The agent leads: it settles the project's entity types first (the kinds
+        of things Knowledge keeps pages for, with examples, attributes and
+        relationships), then what the project is, its goals, people,
+        organizations and topics, and saves the profile as it goes. The session
+        is held to the profile. Returns ``{run_id, thread_id, ...}``; stream it
+        with ``runs.stream`` or ``runs.stream_text``.
+
+        Reply in the same ``thread_id``. When the run parked on a question
+        (``runs.get(run_id)["question"]``), send the reply with ``answer=True``.
+        ``required`` tells the agent the organization requires the profile before
+        the project can be used (``projects.get(...)["requires_knowledge_profile"]``).
+        Only the project's owners may save its profile.
+        """
+        body = clean_body(
+            {
+                "idempotency_key": idempotency_key or uuid.uuid4().hex,
+                "message": message,
+                "thread_id": thread_id,
+                "home_project_id": project_id,
+                "scope": {"knowledge_graph": True, "projects": [{"id": project_id}]},
+                # A client with no profile panel, confined to the profile.
+                "profile_builder_meta": {
+                    "profile_scope": "project",
+                    "project_id": project_id,
+                    "required": required,
+                    "setup_only": True,
+                    "surface": "terminal",
+                },
+                "is_ask_user_response": answer or None,
+            }
+        )
+        # Retrying is safe: the route returns the existing run for the same body key.
+        return self._run(
+            adjusted(ops.build_runs_start_chat_run(body=body), server_deduplicated=True)
+        )
 
     def update_knowledge_profile(self, project_id: str, **fields: Any) -> Any:
         """Change the fields given; the rest are kept. A list given replaces that list.
