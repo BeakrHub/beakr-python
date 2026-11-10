@@ -73,17 +73,18 @@ print(link["url"])  # shown once; send it
 
 ### Tell Knowledge what a project is about
 
-A project's Knowledge profile steers how Beakr compiles its files: what the
-project is for, the people, organizations and topics that matter, and the kinds
-of things to build pages for. Set it before or after uploading; Knowledge reads
-it when it next compiles files. Only the project's owners may set it.
+A project's Knowledge profile steers how Beakr compiles its files. Its most
+important part is the entity types: the kinds of things Knowledge builds pages
+for (batches, deviations, CAPAs, suppliers). It also holds what the project is
+for and the people, organizations and topics that matter. Knowledge reads it
+when it next compiles files. Only the project's owners may set it.
 
 ```python
 beakr.projects.set_knowledge_profile(
     project_id,
+    entity_types=["batch", "deviation", "capa", "supplier"],
     description="Batch records, deviations and CAPAs for the Basel site",
     goals=["Track deviations to closure"],
-    entity_types=["batch", "deviation", "capa", "supplier"],
     core_people=[{"name": "Priya Natarajan", "role": "Batch owner"}],
     extraction_guidance="Record each deviation's root cause and its CAPA.",
 )
@@ -93,6 +94,25 @@ print(beakr.projects.knowledge_profile(project_id)["entity_types"])
 
 `knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
 while the project has none.
+
+Or let Beakr's agent set it up with you: it leads a conversation that settles
+the entity types first (with examples, attributes and relationships), then the
+rest, and saves the profile as it goes.
+
+```python
+run = beakr.projects.start_profile_setup(project_id, "Set up this project's profile.")
+for chunk in beakr.runs.stream_text(run["run_id"]):
+    print(chunk, end="", flush=True)
+# Reply in the same thread (answer=True when the run parked on a question):
+beakr.projects.start_profile_setup(
+    project_id, "We track lots and deviations.", thread_id=run["thread_id"]
+)
+```
+
+When an organization requires a profile on every new project, a project
+without one takes no files, connector sources or Knowledge: those calls raise
+`ProjectProfileRequiredError` (409 `project_profile_required`, a
+`ConflictError`) until the profile has content. Reads still work.
 
 ### Skills
 
@@ -203,7 +223,8 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`;
   its subclasses `PersonReviewRequiredError` for `person_review_required` and
   `SessionRequiredError` for `session_required`), `NotFoundError` (and its
-  subclass `NotProvidedError`, below), `ConflictError`,
+  subclass `NotProvidedError`, below), `ConflictError` (and its subclass
+  `ProjectProfileRequiredError` for `project_profile_required`),
   `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`,
   `KnowledgeCommandError` for a knowledge command the door refused, and
   `UnexpectedResponseError` for a success whose body is not JSON. A body that is

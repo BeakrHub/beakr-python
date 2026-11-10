@@ -254,6 +254,26 @@ class ConflictError(BeakrError):
     """409."""
 
 
+class ProjectProfileRequiredError(ConflictError):
+    """409 ``project_profile_required``: the project still owes its Knowledge profile.
+
+    A project created while its organization requires a profile takes no files,
+    connector sources or Knowledge until the profile has content. Set it with
+    ``projects.set_knowledge_profile`` or ``projects.start_profile_setup``, then
+    retry. Reads are never refused.
+    """
+
+    @property
+    def project_id(self) -> str | None:
+        value = self.details.get("project_id")
+        return str(value) if value else None
+
+    @property
+    def project_name(self) -> str | None:
+        value = self.details.get("project_name")
+        return str(value) if value else None
+
+
 class ValidationError(BeakrError):
     """400 or 422: the request was malformed or failed validation."""
 
@@ -594,6 +614,8 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
             return _not_provided(response, common)
         return NotFoundError(message, **common)
     if status == 409:
+        if code == "project_profile_required":
+            return ProjectProfileRequiredError(message, **common)
         return ConflictError(message, **common)
     if status == 429:
         return RateLimitError(
