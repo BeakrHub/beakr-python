@@ -28,7 +28,7 @@ to an agent. :meth:`Sessions.start` opens a fresh one for a block of work::
 
     with beakr.sessions.start(label="nightly import") as s:
         s.client.knowledge.write(...)
-        print(s.current()["lock_state"], s.trail())
+        print(s.current()["lock_state"])
     # ended here; the id is never used again
 """
 
@@ -46,7 +46,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
 from beakr_sdk.credentials import REFRESH_SKEW_SECONDS
-from beakr_sdk.errors import UnexpectedResponseError, ValidationError
+from beakr_sdk.errors import NotFoundError, UnexpectedResponseError, ValidationError
 from beakr_sdk.resources._base import Resource
 
 
@@ -194,10 +194,6 @@ class AgentSession:
         """The session now: its lock state, write project and the projects it touched."""
         return self.client.sessions.current()
 
-    def trail(self, **kwargs: Any) -> Any:
-        """What the session read and wrote (:meth:`Sessions.trail`)."""
-        return self.client.sessions.trail(**kwargs)
-
     def end(self) -> Any:
         """End the session now. Its id is used up: requests with it answer ``SessionEndedError``."""
         return self.client.sessions.end(self.id) if self.id else None
@@ -223,10 +219,11 @@ class SessionScope:
         call = adjusted(ops.build_sessions_create_session(body=self._body), idempotent=False)  # type: ignore[arg-type]
         try:
             session = yield call
-        except ValidationError as exc:
-            # A server without sessions per conversation refuses the id; the
-            # client still sends it, which labels its writes as one session.
-            if exc.code != "feature_not_enabled":
+        except (NotFoundError, ValidationError) as exc:
+            # A server without sessions (404), or without sessions per
+            # conversation (422 feature_not_enabled), starts none; the client
+            # still sends the id, which labels its writes as one session.
+            if isinstance(exc, ValidationError) and exc.code != "feature_not_enabled":
                 raise
             session = None
         self._session = AgentSession(agent_session_id, client, session)

@@ -1,9 +1,9 @@
 """Project isolation: one server-side session per client, its helpers and refusals.
 
 Every client sends an ``X-Beakr-Session`` id (tests/test_transport.py pins
-where it comes from); the server keys a person's session on it, so auto-lock,
-the cross-project guard and the read trail apply to an SDK script as to an
-agent. ``sessions.start`` opens a fresh one for a block of work.
+where it comes from); the server keys a person's session on it, so auto-lock
+and the cross-project guard apply to an SDK script as to an agent.
+``sessions.start`` opens a fresh one for a block of work.
 """
 
 from __future__ import annotations
@@ -101,11 +101,14 @@ def test_start_ends_the_session_when_the_block_raises(client):
     assert ended.call_count == 1
 
 
-def test_start_on_a_server_without_sessions_per_conversation_only_labels(client):
+@pytest.mark.parametrize(
+    ("status", "code"),
+    [(422, "feature_not_enabled"), (404, "not_found")],
+    ids=["no sessions per conversation", "no sessions"],
+)
+def test_start_on_a_server_without_sessions_per_conversation_only_labels(client, status, code):
     with respx.mock(base_url=BASE) as router:
-        router.post("/v1/sessions").mock(
-            return_value=_refusal(422, "feature_not_enabled", "Not enabled.")
-        )
+        router.post("/v1/sessions").mock(return_value=_refusal(status, code, "Not enabled."))
         me = router.get("/v1/me").mock(return_value=httpx.Response(200, json={}))
         with client.sessions.start() as s:
             s.client.me.get()
