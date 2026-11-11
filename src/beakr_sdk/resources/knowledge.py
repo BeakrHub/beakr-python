@@ -66,9 +66,11 @@ def cross_project_hold(result: Any) -> dict[str, Any] | None:
     read) is staged as usual but held: only an owner or admin of the project,
     acting as a person, can accept it, and auto-approve leaves it. The write
     still succeeds, so this is a normal result, not an error. ``result`` is a
-    write's response or a proposal; the hold is ``{reason, projects, approver,
-    project}``, ``projects`` naming where the content came from (``{id, name,
-    via}``) and ``project`` the project it waits in.
+    write's response (its ``proposal`` carries the hold) or a proposal; the hold
+    is ``{reason, projects, approver, project, can_accept}``, ``projects``
+    naming where the content came from (``{id, name, via, cited}``, ``cited``
+    the sources from it), ``project`` the project it waits in, and
+    ``can_accept`` (on proposal reads) whether the caller may accept it.
     """
     if not isinstance(result, Mapping):
         return None
