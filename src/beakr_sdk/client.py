@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.members import Members
     from beakr_sdk.resources.org_admin import OrgAdmin
     from beakr_sdk.resources.organizations import Organizations
+    from beakr_sdk.resources.project_isolation import ProjectIsolation
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
     from beakr_sdk.resources.sessions import Sessions
@@ -96,6 +97,7 @@ class Beakr(BaseClient):
     labels: Labels[Sync]
     end_user_tokens: EndUserTokens[Sync]
     sessions: Sessions[Sync]
+    project_isolation: ProjectIsolation[Sync]
     projects: Projects[Sync]
     files: Files[Sync]
     bulk_uploads: BulkUploads[Sync]

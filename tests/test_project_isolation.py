@@ -38,7 +38,7 @@ def _session(**extra) -> dict:
         "id": "s1",
         "status": "active",
         "mode": "auto_lock",
-        "agent_session_id": "conv-1",
+        "agent_session": "conv-1",
         "lock_state": "open",
         "write_project": None,
         "touched_projects": [],
@@ -73,9 +73,9 @@ def test_start_opens_a_fresh_session_and_ends_it(client):
             client.me.get()
             assert ended.call_count == 0
     body = json.loads(created.calls[0].request.content)
-    fresh = body["agent_session_id"]
+    fresh = body["agent_session"]
     assert body == {
-        "agent_session_id": fresh,
+        "agent_session": fresh,
         "label": "nightly import",
         "client_name": "sdk-python",
     }
@@ -139,7 +139,7 @@ async def test_async_start_opens_and_ends_a_session(async_client):
         async with async_client.sessions.start(label="job") as s:
             assert isinstance(s.client, AsyncBeakr)
             assert (await s.current())["lock_state"] == "locked"
-    fresh = json.loads(created.calls[0].request.content)["agent_session_id"]
+    fresh = json.loads(created.calls[0].request.content)["agent_session"]
     assert current.calls[0].request.headers["x-beakr-session"] == fresh
     assert ended.call_count == 1
 
@@ -284,3 +284,47 @@ def test_a_held_write_is_a_normal_result_that_says_why(client):
     assert cross_project_hold(proposal) == hold
     assert cross_project_hold({"id": "p2", "cross_project_hold": None}) is None
     assert cross_project_hold(None) is None
+
+
+# -- settings -------------------------------------------------------------------
+
+
+def test_the_settings_and_a_projects_guard_send_only_what_changes(client):
+    settings = {
+        "session_mode": "auto_lock",
+        "auto_lock_counts_search_results": True,
+        "agent_writes_require_session": True,
+        "cross_project_guard": "hold",
+        "available": {
+            "server_agent_sessions": True,
+            "session_auto_lock": True,
+            "agent_writes_require_session": True,
+            "cross_project_guard": True,
+        },
+        "can_change": True,
+    }
+    guard = {
+        "project_id": "pb",
+        "project_name": "Pharma B",
+        "override": None,
+        "org_default": "hold",
+        "effective": "hold",
+        "can_change": True,
+        "available": True,
+    }
+    with respx.mock(base_url=BASE) as router:
+        put = router.put("/v1/project-isolation").mock(
+            return_value=httpx.Response(200, json=settings)
+        )
+        set_guard = router.put("/v1/projects/pb/cross-project-guard").mock(
+            return_value=httpx.Response(200, json=guard)
+        )
+        assert client.project_isolation.update(session_mode="auto_lock") == settings
+        client.projects.set_cross_project_guard("pb", None)
+        client.projects.set_cross_project_guard("pb", "refuse")
+    assert json.loads(put.calls[0].request.content) == {"session_mode": "auto_lock"}
+    # None is sent: it clears the project's own guard, so it follows the org.
+    assert [json.loads(c.request.content) for c in set_guard.calls] == [
+        {"override": None},
+        {"override": "refuse"},
+    ]

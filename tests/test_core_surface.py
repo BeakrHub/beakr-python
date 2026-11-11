@@ -42,6 +42,7 @@ CORE_RESOURCES = {
     "meta",
     "org",
     "organizations",
+    "project_isolation",
     "projects",
     "runs",
     "sessions",

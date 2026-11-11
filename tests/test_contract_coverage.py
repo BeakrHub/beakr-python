@@ -124,6 +124,13 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("PATCH /v1/sessions/{}", lambda c: c.sessions.update("s1", read=["p1"])),
     ("POST /v1/sessions/{}/end", lambda c: c.sessions.end("s1")),
     ("POST /v1/sessions/{}/tokens", lambda c: c.sessions.mint_token("s1")),
+    ("GET /v1/project-isolation", lambda c: c.project_isolation.get()),
+    ("PUT /v1/project-isolation", lambda c: c.project_isolation.update(session_mode="auto_lock")),
+    ("GET /v1/projects/{}/cross-project-guard", lambda c: c.projects.cross_project_guard("p1")),
+    (
+        "PUT /v1/projects/{}/cross-project-guard",
+        lambda c: c.projects.set_cross_project_guard("p1", "hold"),
+    ),
     ("DELETE /v1/auth/end-user-tokens/{}", lambda c: c.end_user_tokens.revoke("t1")),
     (
         "GET /v1/organizations/{}/external-users",

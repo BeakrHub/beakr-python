@@ -218,7 +218,7 @@ class SessionScope:
         self._session: AgentSession | None = None
 
     def _open(self) -> Flow:
-        agent_session_id = str(self._body["agent_session_id"])
+        agent_session_id = str(self._body["agent_session"])
         client = session_client(self._parent, agent_session_id)
         call = adjusted(ops.build_sessions_create_session(body=self._body), idempotent=False)  # type: ignore[arg-type]
         try:
@@ -319,7 +319,7 @@ class Sessions(Resource[M]):
 
         ``with beakr.sessions.start(label="import") as s:`` makes a new
         ``X-Beakr-Session`` id, starts that session on the server
-        (``POST /v1/sessions`` with ``agent_session_id``) and gives ``s.client``,
+        (``POST /v1/sessions`` with ``agent_session``) and gives ``s.client``,
         a client that sends the id; leaving the block ends the session. Use it
         for each unit of work that should be locked to its own project. On a
         server without sessions per agent conversation nothing is started and
@@ -327,7 +327,7 @@ class Sessions(Resource[M]):
         """
         body = clean_body(
             {
-                "agent_session_id": new_session_id(),
+                "agent_session": new_session_id(),
                 "label": label,
                 "client_name": self._credential_client(client_name),
             }
