@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 import httpx
 import pytest
@@ -58,16 +59,26 @@ def test_the_session_is_sent_from_the_option_or_beakr_session(monkeypatch) -> No
     assert "x-beakr-session" not in route.calls.last.request.headers
 
 
+# Without one, each client makes its own id once and sends it on every request:
+# the server keys its session (auto-lock, the cross-project guard, the read
+# trail) on it, so one script lands in exactly one session.
 @respx.mock
-def test_no_session_header_without_a_session(monkeypatch) -> None:
+def test_each_client_sends_one_id_of_its_own_without_a_session(monkeypatch) -> None:
     from beakr_sdk import AsyncBeakr, Beakr
 
     monkeypatch.delenv("BEAKR_SESSION", raising=False)
     route = respx.get(f"{BASE}/v1/me").respond(json={"user": {}})
     with Beakr(api_key="bk_live_k", base_url=BASE) as b:
         b.me.get()
-    assert "x-beakr-session" not in route.calls.last.request.headers
-    assert AsyncBeakr(api_key="bk_live_k", base_url=BASE).session is None
+        b.me.get()
+    first, second = (call.request.headers["x-beakr-session"] for call in route.calls)
+    assert first == second == b.session
+    assert re.fullmatch(r"sdk-python-[0-9a-f]{32}", first)
+    with Beakr(api_key="bk_live_k", base_url=BASE) as other:
+        other.me.get()
+    assert route.calls.last.request.headers["x-beakr-session"] != first
+    async_session = AsyncBeakr(api_key="bk_live_k", base_url=BASE).session
+    assert async_session and async_session.startswith("sdk-python-")
 
 
 @pytest.mark.parametrize("status", [500, 502, 503, 504])

@@ -18,6 +18,18 @@ A session started without projects is pending: its requests raise
 at ``scoped.picker_url``. A session's own token may only drop projects
 (:meth:`Sessions.update` with it raises
 :class:`~beakr_sdk.errors.SessionWidenRefusedError` for anything else).
+
+Where the server keeps a session per agent conversation, no token is needed: a
+person's API key that sends ``X-Beakr-Session: <id>`` runs inside that person's
+session for the id, started on first use. Every client sends one (its
+``session``, else ``BEAKR_SESSION``, else an id it makes once), so a script
+lands in one session, and auto-lock and the cross-project guard apply to it as
+to an agent. :meth:`Sessions.start` opens a fresh one for a block of work::
+
+    with beakr.sessions.start(label="nightly import") as s:
+        s.client.knowledge.write(...)
+        print(s.current()["lock_state"], s.trail())
+    # ended here; the id is never used again
 """
 
 from __future__ import annotations
@@ -28,12 +40,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
+from beakr_sdk._base_client import new_session_id
 from beakr_sdk._calls import Call, Flow, adjusted, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns, returns_all
 from beakr_sdk.credentials import REFRESH_SKEW_SECONDS
-from beakr_sdk.errors import UnexpectedResponseError
+from beakr_sdk.errors import UnexpectedResponseError, ValidationError
 from beakr_sdk.resources._base import Resource
 
 
@@ -130,6 +143,110 @@ def scoped_client(parent: Any, session_id: str, token: dict[str, Any], *, ttl: i
     return client
 
 
+def session_client(parent: Any, session: str) -> Any:
+    """A client like ``parent`` that sends ``session`` as ``X-Beakr-Session``.
+
+    It shares ``parent``'s credential (and its refresh), connection pool and
+    settings, so closing it closes nothing.
+    """
+    client = type(parent)(
+        api_key=parent._explicit_api_key,
+        base_url=parent.base_url,
+        client_name=parent.client_name,
+        agent=parent.agent,
+        run=parent.run,
+        session=session,
+        org_id=parent.org_id,
+        timeout=parent.timeout,
+        max_retries=parent.max_retries,
+        default_headers=parent._default_headers,
+        token_store=parent._token_store,
+        http_client=parent._http,
+    )
+    client._credential = parent.credential
+    client._session_renewal = parent._session_renewal
+    client._refresh_lock = parent._refresh_lock
+    client._sleep = parent._sleep
+    client._now = parent._now
+    return client
+
+
+@dataclass
+class AgentSession:
+    """A session joined by ``X-Beakr-Session``, and a client that sends its id.
+
+    ``session`` is the server's record of it (``mode``, ``lock_state``,
+    ``write_project``, ``touched_projects``...) as it was when it started; it
+    is ``None`` on a server without sessions per agent conversation, where the
+    id only labels the writes. :meth:`current` reads it again.
+    """
+
+    agent_session_id: str
+    client: Any = field(repr=False)
+    session: dict[str, Any] | None = None
+
+    @property
+    def id(self) -> str | None:
+        """The session's id on the server (``None`` where the server keeps none)."""
+        return str(self.session["id"]) if self.session else None
+
+    def current(self) -> Any:
+        """The session now: its lock state, write project and the projects it touched."""
+        return self.client.sessions.current()
+
+    def trail(self, **kwargs: Any) -> Any:
+        """What the session read and wrote (:meth:`Sessions.trail`)."""
+        return self.client.sessions.trail(**kwargs)
+
+    def end(self) -> Any:
+        """End the session now. Its id is used up: requests with it answer ``SessionEndedError``."""
+        return self.client.sessions.end(self.id) if self.id else None
+
+
+def _end_current() -> Flow:
+    """End the session the requesting client runs in."""
+    current = yield ops.build_sessions_current_session()
+    return (yield ops.build_sessions_end_session(str(current["id"])))
+
+
+class SessionScope:
+    """``with beakr.sessions.start() as s`` (``async with`` on ``AsyncBeakr``): one session."""
+
+    def __init__(self, parent: Any, body: dict[str, Any]) -> None:
+        self._parent = parent
+        self._body = body
+        self._session: AgentSession | None = None
+
+    def _open(self) -> Flow:
+        agent_session_id = str(self._body["agent_session_id"])
+        client = session_client(self._parent, agent_session_id)
+        call = adjusted(ops.build_sessions_create_session(body=self._body), idempotent=False)  # type: ignore[arg-type]
+        try:
+            session = yield call
+        except ValidationError as exc:
+            # A server without sessions per conversation refuses the id; the
+            # client still sends it, which labels its writes as one session.
+            if exc.code != "feature_not_enabled":
+                raise
+            session = None
+        self._session = AgentSession(agent_session_id, client, session)
+        return self._session
+
+    def __enter__(self) -> AgentSession:
+        return self._parent._drive(self._open())  # type: ignore[no-any-return]
+
+    def __exit__(self, *exc_info: object) -> None:
+        if self._session is not None:
+            self._session.end()
+
+    async def __aenter__(self) -> AgentSession:
+        return await self._parent._drive(self._open())  # type: ignore[no-any-return]
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        if self._session is not None and self._session.id:
+            await self._session.end()
+
+
 class Sessions(Resource[M]):
     """``/v1/sessions``."""
 
@@ -197,9 +314,34 @@ class Sessions(Resource[M]):
     def get(self, session_id: str) -> Any:
         return self._run(ops.build_sessions_get_session(session_id))
 
+    def start(self, *, label: str | None = None, client_name: str | None = None) -> SessionScope:
+        """A fresh session for a block of work, ended when the block ends.
+
+        ``with beakr.sessions.start(label="import") as s:`` makes a new
+        ``X-Beakr-Session`` id, starts that session on the server
+        (``POST /v1/sessions`` with ``agent_session_id``) and gives ``s.client``,
+        a client that sends the id; leaving the block ends the session. Use it
+        for each unit of work that should be locked to its own project. On a
+        server without sessions per agent conversation nothing is started and
+        ``s.client`` only labels its writes with the id.
+        """
+        body = clean_body(
+            {
+                "agent_session_id": new_session_id(),
+                "label": label,
+                "client_name": self._credential_client(client_name),
+            }
+        )
+        return SessionScope(self._client, body)
+
     @returns(ops.build_sessions_current_session)
     def current(self) -> Any:
-        """The session of the client making the request (a scoped client only)."""
+        """The session this client's requests run in.
+
+        A scoped client's session, or the one its ``X-Beakr-Session`` joins: with
+        auto-lock, ``lock_state`` (``open``, ``locked``, ``read_only``),
+        ``write_project`` and ``touched_projects`` say what it may still write.
+        """
         return self._run(ops.build_sessions_current_session())
 
     @returns(ops.build_sessions_update_session)
@@ -229,9 +371,18 @@ class Sessions(Resource[M]):
         return self._run(ops.build_sessions_update_session(session_id, body=body))  # type: ignore[arg-type]
 
     @returns(ops.build_sessions_end_session)
-    def end(self, session_id: str) -> Any:
-        """End the session; its tokens stop working at once."""
-        return self._run(ops.build_sessions_end_session(session_id))
+    def end(self, session_id: str | None = None) -> Any:
+        """End the session; its tokens stop working at once.
+
+        Without ``session_id``, ends the session this client's requests run in
+        (:meth:`current`). An ``X-Beakr-Session`` id is used once: after its
+        session ends, this client's requests raise
+        :class:`~beakr_sdk.errors.SessionEndedError`; make a new client or use
+        :meth:`start` to go on.
+        """
+        if session_id is not None:
+            return self._run(ops.build_sessions_end_session(session_id))
+        return self._drive(_end_current())
 
     def mint_token(self, session_id: str, *, ttl_seconds: int | None = None) -> Any:
         """Mint another token for the session: ``{token, token_type, expires_at}``.

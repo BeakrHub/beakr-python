@@ -30,6 +30,8 @@ from beakr_sdk.errors import (
     BeakrError,
     BeakrUploadInterrupted,
     ConflictError,
+    CrossProjectOwnerRequiredError,
+    CrossProjectWriteRefusedError,
     KnowledgeCommandError,
     NotFoundError,
     NotProvidedError,
@@ -38,7 +40,10 @@ from beakr_sdk.errors import (
     ProjectProfileRequiredError,
     RateLimitError,
     ServerError,
+    SessionEndedError,
+    SessionLockedToProjectError,
     SessionNeedsSelectionError,
+    SessionReadOnlyError,
     SessionRequiredError,
     SessionWidenRefusedError,
     SessionWriteScopeError,
@@ -47,6 +52,7 @@ from beakr_sdk.errors import (
     ValidationError,
 )
 from beakr_sdk.query_spec import QuerySpec
+from beakr_sdk.resources.knowledge import cross_project_hold
 
 __all__ = [
     "APIConnectionError",
@@ -57,6 +63,8 @@ __all__ = [
     "BeakrUploadInterrupted",
     "Capabilities",
     "ConflictError",
+    "CrossProjectOwnerRequiredError",
+    "CrossProjectWriteRefusedError",
     "KnowledgeCommandError",
     "NotFoundError",
     "NotProvidedError",
@@ -68,7 +76,10 @@ __all__ = [
     "RunFailedError",
     "RunNeedsInputError",
     "ServerError",
+    "SessionEndedError",
+    "SessionLockedToProjectError",
     "SessionNeedsSelectionError",
+    "SessionReadOnlyError",
     "SessionRequiredError",
     "SessionWidenRefusedError",
     "SessionWriteScopeError",
@@ -76,4 +87,5 @@ __all__ = [
     "UnsafePathError",
     "ValidationError",
     "__version__",
+    "cross_project_hold",
 ]
