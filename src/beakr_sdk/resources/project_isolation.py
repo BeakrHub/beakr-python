@@ -1,5 +1,7 @@
 """Project isolation settings: ``client.project_isolation``.
 
+They live under ``/v1/organizations/{org_id}/project-isolation``; when
+``org_id`` is omitted the caller's active organization is looked up first.
 An organization admin decides how agent sessions keep projects apart:
 
 - ``session_mode``: ``picker`` (the person chooses each session's projects) or
@@ -21,22 +23,34 @@ from __future__ import annotations
 
 from typing import Any
 
-from beakr_sdk._calls import clean_body
+from beakr_sdk._calls import Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
-from beakr_sdk._typing import returns
+from beakr_sdk.errors import NotProvidedError
 from beakr_sdk.resources._base import Resource
 
 
 class ProjectIsolation(Resource[M]):
-    """``/v1/project-isolation``."""
+    """``/v1/organizations/{org_id}/project-isolation``."""
 
-    @returns(ops.build_organizations_get_project_isolation)
-    def get(self) -> Any:
+    def _org_id_flow(self, org_id: str | None) -> Flow:
+        if org_id:
+            return org_id
+        try:
+            org = yield ops.build_organizations_get_active_org()
+        except NotProvidedError as exc:
+            raise exc.naming("project isolation") from None
+        return str(org["id"])
+
+    def get(self, *, org_id: str | None = None) -> Any:
         """The organization's settings, which features are available, and ``can_change``."""
-        return self._run(ops.build_organizations_get_project_isolation())
 
-    @returns(ops.build_organizations_set_project_isolation)
+        def flow() -> Flow:
+            resolved = yield from self._org_id_flow(org_id)
+            return (yield ops.build_organizations_get_project_isolation(resolved))
+
+        return self._drive(flow())
+
     def update(
         self,
         *,
@@ -44,6 +58,7 @@ class ProjectIsolation(Resource[M]):
         auto_lock_counts_search_results: bool | None = None,
         agent_writes_require_session: bool | None = None,
         cross_project_guard: str | None = None,
+        org_id: str | None = None,
     ) -> Any:
         """Change the settings given (an organization admin acting as a person)."""
         body = clean_body(
@@ -54,4 +69,9 @@ class ProjectIsolation(Resource[M]):
                 "cross_project_guard": cross_project_guard,
             }
         )
-        return self._run(ops.build_organizations_set_project_isolation(body=body))  # type: ignore[arg-type]
+
+        def flow() -> Flow:
+            resolved = yield from self._org_id_flow(org_id)
+            return (yield ops.build_organizations_set_project_isolation(resolved, body=body))  # type: ignore[arg-type]
+
+        return self._drive(flow())

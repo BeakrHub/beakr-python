@@ -316,7 +316,10 @@ def test_the_settings_and_a_projects_guard_send_only_what_changes(client):
         "available": True,
     }
     with respx.mock(base_url=BASE) as router:
-        put = router.put("/v1/project-isolation").mock(
+        active = router.get("/v1/me/organization").mock(
+            return_value=httpx.Response(200, json={"id": "org1"})
+        )
+        put = router.put("/v1/organizations/org1/project-isolation").mock(
             return_value=httpx.Response(200, json=settings)
         )
         set_guard = router.put("/v1/projects/pb/cross-project-guard").mock(
@@ -325,6 +328,8 @@ def test_the_settings_and_a_projects_guard_send_only_what_changes(client):
         assert client.project_isolation.update(session_mode="auto_lock") == settings
         client.projects.set_cross_project_guard("pb", None)
         client.projects.set_cross_project_guard("pb", "refuse")
+    # The active organization's, looked up first.
+    assert active.call_count == 1
     assert json.loads(put.calls[0].request.content) == {"session_mode": "auto_lock"}
     # None is sent: it clears the project's own guard, so it follows the org.
     assert [json.loads(c.request.content) for c in set_guard.calls] == [
