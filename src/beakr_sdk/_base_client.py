@@ -13,7 +13,7 @@ import random
 import uuid
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -128,7 +128,7 @@ class BaseClient:
         client_name: str | None = None,
         agent: str | None = None,
         run: str | None = None,
-        session: str | None = None,
+        session: str | Literal[False] | None = None,
         org_id: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -140,11 +140,11 @@ class BaseClient:
         self.agent = agent
         self.run = run
         # Unset means the environment's, else an id made once for this client, so
-        # everything one script does lands in one server-side session; "" sends
-        # none even when BEAKR_SESSION is set.
+        # everything one script does lands in one server-side session; False
+        # (or "") sends none even when BEAKR_SESSION is set.
         if session is None:
             session = os.environ.get("BEAKR_SESSION") or new_session_id()
-        self.session = session
+        self.session: str | None = session or None
         self.org_id = resolve_org_id(org_id)
         self.timeout = timeout
         self.max_retries = max(0, max_retries)

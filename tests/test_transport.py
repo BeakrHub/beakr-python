@@ -57,6 +57,12 @@ def test_the_session_is_sent_from_the_option_or_beakr_session(monkeypatch) -> No
     with Beakr(api_key="bk_live_k", base_url=BASE, session="") as b:
         b.me.get()
     assert "x-beakr-session" not in route.calls.last.request.headers
+    # A picker-mode organization's scripts opt out: a header-joined session
+    # there waits for the person to choose its projects.
+    with Beakr(api_key="bk_live_k", base_url=BASE, session=False) as b:
+        b.me.get()
+    assert "x-beakr-session" not in route.calls.last.request.headers
+    assert b.session is None
 
 
 # Without one, each client makes its own id once and sends it on every request:

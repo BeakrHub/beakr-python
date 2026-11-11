@@ -77,9 +77,14 @@ class Beakr(BaseClient):
         run: Sent as ``X-Beakr-Run``: labels this client's Knowledge writes as one
             run. Each proposal it files carries the label as ``filed_by.run``, so
             a reviewer can see which writes belong together.
-        session: Sent as ``X-Beakr-Session``: the agent session behind the writes
-            (a conversation or thread id), shown on their provenance. Defaults to
-            ``BEAKR_SESSION``; ``""`` sends none.
+        session: Sent as ``X-Beakr-Session`` on every request: the agent session
+            behind the writes (a conversation or thread id), shown on their
+            provenance. Defaults to ``BEAKR_SESSION``, else an id made once for
+            this client, so everything it does runs in one server-side session
+            (auto-lock and the cross-project guard apply to it as to an agent).
+            Meant for organizations in ``auto_lock`` mode: in ``picker`` mode such
+            a session waits for the person to choose its projects, so pass
+            ``False`` (or ``""``) to send none.
         timeout: Per-request timeout in seconds.
         max_retries: Retries on 429/502/503/504 and connection errors.
     """

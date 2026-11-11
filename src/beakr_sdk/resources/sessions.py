@@ -127,7 +127,7 @@ def scoped_client(parent: Any, session_id: str, token: dict[str, Any], *, ttl: i
         base_url=parent.base_url,
         client_name=parent.client_name,
         agent=parent.agent,
-        session=parent.session or "",
+        session=parent.session or False,
         org_id=parent.org_id,
         timeout=parent.timeout,
         max_retries=parent.max_retries,
