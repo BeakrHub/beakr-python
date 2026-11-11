@@ -259,16 +259,29 @@ def test_the_cross_project_guard_refusals_are_typed(client):
 def test_a_held_write_is_a_normal_result_that_says_why(client):
     hold = {
         "reason": "Content from Pharma A (cited).",
-        "projects": [{**PHARMA_A, "via": ["cited"]}],
+        "projects": [
+            {
+                **PHARMA_A,
+                "via": ["cited"],
+                "cited": [{"title": "memo.pdf", "source_type": "artifact"}],
+            }
+        ],
         "approver": "owner_or_admin",
         "project": PHARMA_B,
     }
+    # The write response's proposal carries the hold; a proposal read adds
+    # whether this caller may accept it.
     staged = {
         "content": [{"type": "text", "text": "Staged."}],
         "outcome": {"status": "ok", "approval_state": "pending"},
         "proposal_id": "p1",
-        "proposal": {"id": "p1", "cross_project_hold": hold},
+        "proposal": {
+            "id": "p1",
+            "cross_project_hold": hold,
+            "needs_project_admin_to_accept": True,
+        },
     }
+    read_hold = {**hold, "can_accept": False}
     with respx.mock(base_url=BASE) as router:
         router.post("/v1/knowledge/wiki/write").mock(return_value=httpx.Response(200, json=staged))
         router.get("/v1/knowledge/wiki/proposals/p1").mock(
@@ -276,7 +289,7 @@ def test_a_held_write_is_a_normal_result_that_says_why(client):
                 200,
                 json={
                     "id": "p1",
-                    "cross_project_hold": hold,
+                    "cross_project_hold": read_hold,
                     "needs_project_admin_to_accept": True,
                 },
             )
@@ -284,7 +297,7 @@ def test_a_held_write_is_a_normal_result_that_says_why(client):
         result = client.knowledge.write("add_fact", rationale="r")
         proposal = client.knowledge.proposals.show("p1")
     assert cross_project_hold(result) == hold
-    assert cross_project_hold(proposal) == hold
+    assert cross_project_hold(proposal) == read_hold
     assert cross_project_hold({"id": "p2", "cross_project_hold": None}) is None
     assert cross_project_hold(None) is None
 
