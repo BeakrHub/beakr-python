@@ -13,7 +13,7 @@ import random
 import uuid
 from collections.abc import Callable, Mapping
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 import httpx
 
@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from beakr_sdk.resources.members import Members
     from beakr_sdk.resources.org_admin import OrgAdmin
     from beakr_sdk.resources.organizations import Organizations
+    from beakr_sdk.resources.project_isolation import ProjectIsolation
     from beakr_sdk.resources.projects import Projects
     from beakr_sdk.resources.runs import Runs, Threads
     from beakr_sdk.resources.sessions import SessionRenewal, Sessions
@@ -86,6 +87,11 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def new_session_id() -> str:
+    """A fresh ``X-Beakr-Session`` id: ``sdk-python-`` and 32 random hex digits."""
+    return f"sdk-python-{uuid.uuid4().hex}"
+
+
 class BaseClient:
     """Shared state and policy. Use :class:`beakr_sdk.Beakr` or ``AsyncBeakr``."""
 
@@ -101,6 +107,7 @@ class BaseClient:
     labels: Labels
     end_user_tokens: EndUserTokens
     sessions: Sessions
+    project_isolation: ProjectIsolation
     projects: Projects
     files: Files
     bulk_uploads: BulkUploads
@@ -121,7 +128,7 @@ class BaseClient:
         client_name: str | None = None,
         agent: str | None = None,
         run: str | None = None,
-        session: str | None = None,
+        session: str | Literal[False] | None = None,
         org_id: str | None = None,
         timeout: float = DEFAULT_TIMEOUT,
         max_retries: int = DEFAULT_MAX_RETRIES,
@@ -132,8 +139,12 @@ class BaseClient:
         self.client_name = client_name or f"sdk-python/{__version__}"
         self.agent = agent
         self.run = run
-        # Unset means the environment's; "" sends none even when BEAKR_SESSION is set.
-        self.session = os.environ.get("BEAKR_SESSION") if session is None else session
+        # Unset means the environment's, else an id made once for this client, so
+        # everything one script does lands in one server-side session; False
+        # (or "") sends none even when BEAKR_SESSION is set.
+        if session is None:
+            session = os.environ.get("BEAKR_SESSION") or new_session_id()
+        self.session: str | None = session or None
         self.org_id = resolve_org_id(org_id)
         self.timeout = timeout
         self.max_retries = max(0, max_retries)

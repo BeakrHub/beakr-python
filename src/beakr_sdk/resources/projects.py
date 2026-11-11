@@ -117,6 +117,24 @@ class Projects(Resource[M]):
         """Archive (reversible); ``update(status="active")`` restores it."""
         return self.update(project_id, status="archived")
 
+    @returns(ops.build_projects_get_cross_project_guard)
+    def cross_project_guard(self, project_id: str) -> Any:
+        """What the project does with writes that bring in content from other projects.
+
+        ``effective`` is ``allow``, ``hold`` (an owner or admin accepts them) or
+        ``refuse``: the project's ``override``, else ``org_default``.
+        """
+        return self._run(ops.build_projects_get_cross_project_guard(project_id))
+
+    @returns(ops.build_projects_set_cross_project_guard)
+    def set_cross_project_guard(self, project_id: str, override: str | None) -> Any:
+        """Set the project's own guard (``allow``, ``hold``, ``refuse``); ``None`` follows the org.
+
+        An owner or admin of the project acting as a person may change it.
+        """
+        body = {"override": override}
+        return self._run(ops.build_projects_set_cross_project_guard(project_id, body=body))  # type: ignore[arg-type]
+
     @returns(ops.build_projects_delete_project)
     def delete(self, project_id: str) -> Any:
         """Delete the project permanently; it cannot be restored (``archive`` is reversible).

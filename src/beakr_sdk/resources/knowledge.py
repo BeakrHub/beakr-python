@@ -17,7 +17,9 @@ Example::
     )
 
 A write stages a proposal (unless the user's auto-approve applies it); review it
-with ``proposals.show`` and apply it with ``proposals.accept``.
+with ``proposals.show`` and apply it with ``proposals.accept``. A write held by a
+project's cross-project guard succeeds too: :func:`cross_project_hold` says why
+it waits and for whom.
 """
 
 from __future__ import annotations
@@ -54,6 +56,28 @@ def result_text(result: dict[str, Any]) -> str:
             if isinstance(block, dict) and block.get("type") == "text" and block.get("text")
         )
     return str(blocks or "")
+
+
+def cross_project_hold(result: Any) -> dict[str, Any] | None:
+    """Why a staged write waits for a project's owner or admin; ``None`` when it does not.
+
+    Where a project's cross-project guard is ``hold``, a write that brings in
+    content from another project (a cited source, or a project its session
+    read) is staged as usual but held: only an owner or admin of the project,
+    acting as a person, can accept it, and auto-approve leaves it. The write
+    still succeeds, so this is a normal result, not an error. ``result`` is a
+    write's response or a proposal; the hold is ``{reason, projects, approver,
+    project}``, ``projects`` naming where the content came from (``{id, name,
+    via}``) and ``project`` the project it waits in.
+    """
+    if not isinstance(result, Mapping):
+        return None
+    for candidate in (result, result.get("proposal")):
+        if isinstance(candidate, Mapping):
+            hold = candidate.get("cross_project_hold")
+            if isinstance(hold, dict):
+                return hold
+    return None
 
 
 def _checked(result: Any) -> Any:

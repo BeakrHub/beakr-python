@@ -201,8 +201,8 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   `https://api.thebeakr.com`.
 - **Headers**: `X-Beakr-Client` (`sdk-python/<version>` unless `client_name=`),
   `X-Beakr-Agent` when `agent=` is set, `X-Beakr-Run` when `run=` is set,
-  `X-Beakr-Session` when `session=` (default: `BEAKR_SESSION`) names the agent
-  session behind the writes, and an `Idempotency-Key` on create calls.
+  `X-Beakr-Session` on every request (below), and an `Idempotency-Key` on
+  create calls.
 - **Retries**: 429, 500, 502, 503, 504 and connection errors, with exponential
   backoff and jitter, honoring `Retry-After` (`max_retries=` to change). The
   header may be seconds or an HTTP-date (IMF-fixdate, or the obsolete RFC 850
@@ -221,10 +221,12 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   ambiguous failure. 501, 505 and other 4xx are never retried.
 - **Errors**: `BeakrError` with `status`, `code`, `message` and `request_id`;
   subclasses `AuthenticationError`, `PermissionDeniedError` (`required_scope`;
-  its subclasses `PersonReviewRequiredError` for `person_review_required` and
-  `SessionRequiredError` for `session_required`), `NotFoundError` (and its
-  subclass `NotProvidedError`, below), `ConflictError` (and its subclass
-  `ProjectProfileRequiredError` for `project_profile_required`),
+  its subclasses `PersonReviewRequiredError` for `person_review_required`,
+  `SessionRequiredError` for `session_required`, and the session and
+  cross-project refusals below), `NotFoundError` (and its
+  subclass `NotProvidedError`, below), `ConflictError` (and its subclasses
+  `ProjectProfileRequiredError` for `project_profile_required` and
+  `SessionEndedError` for `session_ended`),
   `ValidationError`, `RateLimitError`, `ServerError`, `APIConnectionError`,
   `KnowledgeCommandError` for a knowledge command the door refused, and
   `UnexpectedResponseError` for a success whose body is not JSON. A body that is
@@ -251,6 +253,64 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   other route in it). The API still serves some routes it no longer documents,
   with no stability promise; the Beakr CLI keeps its own private client for the
   few it calls.
+
+### Sessions and project isolation
+
+Every client sends an `X-Beakr-Session` id on every request: `session=`, else
+`BEAKR_SESSION`, else an id the client makes once (`sdk-python-<32 hex>`), so
+two clients never share one. Where the server keeps a session per agent
+conversation (`server_agent_sessions`), a person's API key that sends the id
+runs inside that person's session for it, started on first use. **One client is
+one session**: auto-lock and the cross-project guard apply to a script exactly
+as to an agent.
+
+This is meant for organizations whose `session_mode` is `auto_lock`. In
+`picker` mode a session started this way is pending: project reads and writes
+raise `SessionNeedsSelectionError` until the person chooses its projects at its
+`picker_url`. A script for a picker-mode organization should pass
+`Beakr(session=False)` (or `session=""`), which sends no id, or start a session
+with chosen projects through `beakr.sessions.create(read=[...], write=[...])`.
+
+- With auto-lock (`session_auto_lock`), the first project a session reads or
+  writes becomes its only write project; once it reads a second project it is
+  read-only for good. A write then raises `SessionReadOnlyError`
+  (`touched_projects`, `project_names`) or `SessionLockedToProjectError`
+  (`write_project`, `refused_projects`). Work in one project per session:
+  start a new one for the next project.
+- A session id is used once. After its session ends (`beakr.sessions.end()`),
+  the client's requests raise `SessionEndedError`; make a new client.
+- Where agents must write inside a session (`agent_writes_require_session`), a
+  write with no session raises `SessionRequiredError`. Service accounts are
+  exempt, and the server ignores their `X-Beakr-Session` (sending it is
+  harmless). OAuth access tokens (`bk_at_`, the CLI's sign-in) do not join a
+  session by header in this release.
+- A project's cross-project guard decides what happens to a write bringing in
+  content from another project (cited, or read earlier in the session):
+  `refuse` raises `CrossProjectWriteRefusedError` (`project`,
+  `other_projects`); `hold` stages it as usual and returns normally, and
+  `cross_project_hold(result)` says why it waits and that only an owner or
+  admin of the project can accept it (`CrossProjectOwnerRequiredError` for
+  anyone else).
+
+```python
+from beakr_sdk import cross_project_hold
+
+print(beakr.sessions.current())  # mode, lock_state, write_project, touched_projects
+
+# A fresh session for a block of work, ended when the block ends.
+with beakr.sessions.start(label="nightly import") as s:
+    staged = s.client.knowledge.add_fact("Stripe", attribute="renewal", value="2027-01-31",
+                                         rationale="Order form", scope="Pharma A")
+    if (hold := cross_project_hold(staged)) is not None:
+        print(hold["reason"])  # waits for an owner or admin of hold["project"]
+    print(s.current()["lock_state"])
+```
+
+`AsyncBeakr` uses `async with beakr.sessions.start(...)`. On a server without
+sessions per conversation, `start` starts nothing (`s.session` is `None`) and
+the id only labels the block's writes. `beakr.sessions.create(read=[...],
+write=[...])` still starts a session whose projects a person chooses, with its
+own token.
 
 ### What this installation serves: `beakr.meta.capabilities()`
 

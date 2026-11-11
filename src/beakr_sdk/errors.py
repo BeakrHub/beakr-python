@@ -140,11 +140,107 @@ class PersonReviewRequiredError(PermissionDeniedError):
 
 
 class SessionRequiredError(PermissionDeniedError):
-    """403 ``session_required``: only a signed-in person (a browser session) may do this.
+    """403 ``session_required``: this needs a session the request is not in.
 
-    Organization security settings, step-up and agent-review policy changes
+    Two refusals share the code. Organization security settings, step-up and
+    agent-review policy changes need a signed-in person (a browser session) and
     refuse API keys and tokens (an agent-review change accepts a key holding
-    ``proposals:accept``).
+    ``proposals:accept``). And where the organization requires agents to write
+    inside a session (``agent_writes_require_session``), a Knowledge or file
+    write with an API key or token outside any session is refused: send
+    ``X-Beakr-Session`` (every client does unless built with ``session=""``) or
+    work in ``client.session()``. Service accounts are exempt.
+    """
+
+
+def _projects(details: dict[str, Any], key: str) -> list[dict[str, Any]]:
+    value = details.get(key)
+    return [p for p in value if isinstance(p, dict)] if isinstance(value, list) else []
+
+
+def _project(details: dict[str, Any], key: str) -> dict[str, Any] | None:
+    value = details.get(key)
+    return value if isinstance(value, dict) else None
+
+
+def _names(projects: list[dict[str, Any]]) -> list[str]:
+    return [str(p.get("name") or p.get("id")) for p in projects]
+
+
+class _ProjectIsolationError(PermissionDeniedError):
+    """A refusal from project isolation; the message names the projects by name."""
+
+    @property
+    def session_id(self) -> str | None:
+        value = self.details.get("session_id")
+        return str(value) if value else None
+
+
+class SessionReadOnlyError(_ProjectIsolationError):
+    """403 ``session_read_only``: the session read two projects, so it may no longer write.
+
+    With auto-lock on, a session that reads a second project becomes read-only
+    for the rest of its life; reads keep working. Start a new session (a new
+    client, or ``client.session()``) and work in one project.
+    ``touched_projects`` lists the projects it read, ``{id, name}`` each.
+    """
+
+    @property
+    def touched_projects(self) -> list[dict[str, Any]]:
+        return _projects(self.details, "touched_projects")
+
+    @property
+    def project_names(self) -> list[str]:
+        return _names(self.touched_projects)
+
+
+class SessionLockedToProjectError(_ProjectIsolationError):
+    """403 ``session_locked_to_project``: the session writes one project and this is another.
+
+    With auto-lock on, the first project a session touches becomes its only
+    write project. ``write_project`` is that project and ``refused_projects``
+    the ones this write tried, ``{id, name}`` each. Start a new session to
+    write them.
+    """
+
+    @property
+    def write_project(self) -> dict[str, Any] | None:
+        return _project(self.details, "write_project")
+
+    @property
+    def refused_projects(self) -> list[dict[str, Any]]:
+        return _projects(self.details, "refused_projects")
+
+
+class CrossProjectWriteRefusedError(_ProjectIsolationError):
+    """403 ``cross_project_write_refused``: the project does not take content from others.
+
+    The write cites a source from another project, or its session read another
+    project, and the target's cross-project guard is ``refuse``. ``project`` is
+    the target; ``other_projects`` the projects the content came from, each
+    ``{id, name, via}`` with ``via`` among ``cited`` and ``read_in_session``.
+    """
+
+    @property
+    def project(self) -> dict[str, Any] | None:
+        return _project(self.details, "project")
+
+    @property
+    def other_projects(self) -> list[dict[str, Any]]:
+        return _projects(self.details, "other_projects")
+
+    @property
+    def project_names(self) -> list[str]:
+        return _names(self.other_projects)
+
+
+class CrossProjectOwnerRequiredError(_ProjectIsolationError):
+    """403 ``cross_project_owner_required``: only an owner or admin of the project may do this.
+
+    The project's cross-project guard is ``hold``: a proposal bringing in
+    content from another project waits for an owner or admin of it, and a
+    write that commits without a proposal is refused. Stage it as a proposal
+    instead, and ask an owner or admin to accept it.
     """
 
 
@@ -187,6 +283,10 @@ _FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
     "session_needs_selection": SessionNeedsSelectionError,
     "session_write_scope": SessionWriteScopeError,
     "session_widen_refused": SessionWidenRefusedError,
+    "session_read_only": SessionReadOnlyError,
+    "session_locked_to_project": SessionLockedToProjectError,
+    "cross_project_write_refused": CrossProjectWriteRefusedError,
+    "cross_project_owner_required": CrossProjectOwnerRequiredError,
 }
 
 
@@ -272,6 +372,14 @@ class ProjectProfileRequiredError(ConflictError):
     def project_name(self) -> str | None:
         value = self.details.get("project_name")
         return str(value) if value else None
+
+
+class SessionEndedError(ConflictError):
+    """409 ``session_ended``: the session this client's ``X-Beakr-Session`` names has ended.
+
+    A session id is used once: after its session ends, the same id never starts
+    another. Make a new client (it makes a new id) or use ``client.session()``.
+    """
 
 
 class ValidationError(BeakrError):
@@ -616,6 +724,8 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     if status == 409:
         if code == "project_profile_required":
             return ProjectProfileRequiredError(message, **common)
+        if code == "session_ended":
+            return SessionEndedError(message, **common)
         return ConflictError(message, **common)
     if status == 429:
         return RateLimitError(
