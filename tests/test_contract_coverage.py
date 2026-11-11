@@ -130,6 +130,21 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.project_isolation.update(session_mode="auto_lock", org_id=ORG),
     ),
     ("GET /v1/projects/{}/cross-project-guard", lambda c: c.projects.cross_project_guard("p1")),
+    ("GET /v1/sessions/{}/trail", lambda c: c.sessions.trail("s1")),
+    ("GET /v1/knowledge/wiki/proposals/{}/trail", lambda c: c.knowledge.proposals.trail("pr1")),
+    (
+        "GET /v1/knowledge/wiki/ingestion-events/{}/trail",
+        lambda c: c.knowledge.ingestion_event_trail("ev1"),
+    ),
+    (
+        "GET /v1/knowledge/wiki/pages/{}/revisions/{}/trail",
+        lambda c: c.knowledge.pages.revision_trail("pg1", 3),
+    ),
+    ("GET /v1/organizations/{}/read-trail", lambda c: c.project_isolation.read_trail(org_id=ORG)),
+    (
+        "PUT /v1/organizations/{}/read-trail",
+        lambda c: c.project_isolation.set_read_trail_retention(30, org_id=ORG),
+    ),
     (
         "PUT /v1/projects/{}/cross-project-guard",
         lambda c: c.projects.set_cross_project_guard("p1", "hold"),

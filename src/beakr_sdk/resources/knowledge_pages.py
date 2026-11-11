@@ -105,6 +105,15 @@ class KnowledgePages(Resource[M]):
             ops.build_knowledge_get_wiki_page_revisions(page_id, limit=limit, cursor=cursor)
         )
 
+    @returns(ops.build_knowledge_revision_trail)
+    def revision_trail(self, page_id: str, revision: int) -> Any:
+        """What the session behind one revision read before writing it.
+
+        ``revision`` is its number in :meth:`revisions`. The same shape as
+        ``knowledge.proposals.trail``.
+        """
+        return self._run(ops.build_knowledge_revision_trail(page_id, revision))
+
     def sources(self, page_id: str) -> Any:
         """Every source that fed the page, as public source records.
 

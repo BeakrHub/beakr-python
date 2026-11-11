@@ -194,9 +194,19 @@ class AgentSession:
         """The session now: its lock state, write project and the projects it touched."""
         return self.client.sessions.current()
 
+    def trail(self, *, limit: int | None = None, cursor: str | None = None) -> Any:
+        """One page of what the session read, newest first (:meth:`Sessions.trail`)."""
+        return self.client.sessions.trail(self.id, limit=limit, cursor=cursor)
+
     def end(self) -> Any:
         """End the session now. Its id is used up: requests with it answer ``SessionEndedError``."""
         return self.client.sessions.end(self.id) if self.id else None
+
+
+def _current_trail(limit: int | None, cursor: str | None) -> Flow:
+    """One page of the read trail of the session the requesting client runs in."""
+    current = yield ops.build_sessions_current_session()
+    return (yield ops.build_sessions_session_trail(str(current["id"]), limit=limit, cursor=cursor))
 
 
 def _end_current() -> Flow:
@@ -340,6 +350,31 @@ class Sessions(Resource[M]):
         ``write_project`` and ``touched_projects`` say what it may still write.
         """
         return self._run(ops.build_sessions_current_session())
+
+    @returns(ops.build_sessions_session_trail)
+    def trail(
+        self, session_id: str | None = None, *, limit: int | None = None, cursor: str | None = None
+    ) -> Any:
+        """One page of what a session read, newest first: ``{data, next_cursor, has_more}``.
+
+        Each read has its ``op`` (``search``, ``cat``, ``rows``,
+        ``documents:<command>``, ``read_file``, ``research``...), the
+        ``projects`` it touched and the ``items`` it returned. Without
+        ``session_id``, the session this client's requests run in
+        (:meth:`current`). Readable by the session's person, organization
+        admins, and owners or admins of a project it read (who see only the
+        reads that touched their projects). Needs the read trail turned on (404
+        ``feature_not_enabled`` otherwise).
+        """
+        if session_id is not None:
+            return self._run(
+                ops.build_sessions_session_trail(session_id, limit=limit, cursor=cursor)
+            )
+        return self._drive(_current_trail(limit, cursor))
+
+    def iter_trail(self, session_id: str, *, page_size: int | None = None) -> Any:
+        """Every read of a session's trail (:meth:`trail`), newest first, following the cursor."""
+        return self._iter(ops.build_sessions_session_trail(session_id, limit=page_size))
 
     @returns(ops.build_sessions_update_session)
     def update(

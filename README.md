@@ -312,6 +312,24 @@ the id only labels the block's writes. `beakr.sessions.create(read=[...],
 write=[...])` still starts a session whose projects a person chooses, with its
 own token.
 
+Where the read trail is on (`session_read_trail`), Beakr records what each
+session read: `beakr.sessions.trail()` is one page of the current session's
+reads, newest first (`trail(session_id)` for another, `iter_trail(session_id)`
+for all of them), each with its `op`, the `projects` it touched and the `items`
+it returned. A write's trail says what its session read before it, grouped by
+project (its own first, other projects flagged `cross_project`):
+
+```python
+trail = beakr.knowledge.proposals.trail(staged["proposal_id"])
+for group in trail["groups"]:
+    print(group["project"], group["cross_project"], len(group["reads"]))
+```
+
+`knowledge.ingestion_event_trail(event_id)` and
+`knowledge.pages.revision_trail(page_id, revision)` do the same for an
+ingestion event and a page revision, and `project_isolation.read_trail()` /
+`set_read_trail_retention(days)` read and set how long reads are kept.
+
 ### What this installation serves: `beakr.meta.capabilities()`
 
 A self-hosted Beakr installation serves only part of the documented contract

@@ -75,3 +75,25 @@ class ProjectIsolation(Resource[M]):
             return (yield ops.build_organizations_set_project_isolation(resolved, body=body))  # type: ignore[arg-type]
 
         return self._drive(flow())
+
+    def read_trail(self, *, org_id: str | None = None) -> Any:
+        """How long session reads are kept (``read_trail_retention_days``, 90 by default).
+
+        Also whether the read trail is ``available`` and ``can_change``.
+        """
+
+        def flow() -> Flow:
+            resolved = yield from self._org_id_flow(org_id)
+            return (yield ops.build_organizations_get_read_trail_settings(resolved))
+
+        return self._drive(flow())
+
+    def set_read_trail_retention(self, days: int, *, org_id: str | None = None) -> Any:
+        """Keep session reads ``days`` days, 1 to 3650 (an organization admin, as a person)."""
+        body = {"read_trail_retention_days": days}
+
+        def flow() -> Flow:
+            resolved = yield from self._org_id_flow(org_id)
+            return (yield ops.build_organizations_set_read_trail_settings(resolved, body=body))  # type: ignore[arg-type]
+
+        return self._drive(flow())

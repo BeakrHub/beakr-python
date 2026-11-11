@@ -140,6 +140,20 @@ class Proposals(Resource[M]):
     def dismiss(self, proposal_id: str) -> Any:
         return self._run(ops.build_knowledge_dismiss_proposal(proposal_id))
 
+    @returns(ops.build_knowledge_proposal_trail)
+    def trail(self, proposal_id: str) -> Any:
+        """What the session that staged the proposal read before it.
+
+        A write's response names its proposal in ``proposal_id``. ``groups``
+        hold the reads, the write's own project first, then other projects in
+        the order they were read, then outside services; ``cross_project`` is
+        true when any came from another project, and ``recorded`` false when
+        the write had no session or the trail was off. Readable by the person
+        whose session wrote it, owners or admins of its project and organization
+        admins (403 ``read_trail_forbidden`` for anyone else).
+        """
+        return self._run(ops.build_knowledge_proposal_trail(proposal_id))
+
     def create(
         self,
         action: str,
@@ -500,6 +514,14 @@ class Knowledge(Resource[M]):
             if value is not None
         }
         return self.documents("search", project_id=project_id, **arguments)
+
+    @returns(ops.build_knowledge_ingestion_event_trail)
+    def ingestion_event_trail(self, event_id: str) -> Any:
+        """What the session behind a Knowledge ingestion event read before it.
+
+        The same shape as :meth:`Proposals.trail`.
+        """
+        return self._run(ops.build_knowledge_ingestion_event_trail(event_id))
 
     def research(self, query: str, *, project_id: str | None = None, quick: bool = True) -> Any:
         """A cited answer from Knowledge and documents; ``quick=False`` for the full researcher.
