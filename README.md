@@ -277,6 +277,10 @@ with chosen projects through `beakr.sessions.create(read=[...], write=[...])`.
   (`touched_projects`, `project_names`) or `SessionLockedToProjectError`
   (`write_project`, `refused_projects`). Work in one project per session:
   start a new one for the next project.
+- A call in a session that must name a project and names none (research, a
+  document search, an upload or folder without a project) raises
+  `SessionProjectRequiredError` (`session_id`): pass one of the session's
+  projects and repeat the call for each project you need.
 - A session id is used once. After its session ends (`beakr.sessions.end()`),
   the client's requests raise `SessionEndedError`; make a new client.
 - Where agents must write inside a session (`agent_writes_require_session`), a

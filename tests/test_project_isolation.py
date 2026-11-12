@@ -22,6 +22,7 @@ from beakr_sdk import (
     PermissionDeniedError,
     SessionEndedError,
     SessionLockedToProjectError,
+    SessionProjectRequiredError,
     SessionReadOnlyError,
     SessionRequiredError,
     cross_project_hold,
@@ -214,6 +215,24 @@ def test_a_locked_session_names_its_project_and_the_refused_one(client):
             client.folders.create("Notes", project_id="pb")
     assert caught.value.write_project == PHARMA_A
     assert caught.value.refused_projects == [PHARMA_B]
+
+
+def test_a_call_in_a_session_that_names_no_project_is_typed(client):
+    """Engine #2651: it used to be insufficient_scope."""
+    with respx.mock(base_url=BASE) as router:
+        router.post("/v1/knowledge/research").mock(
+            return_value=_refusal(
+                403,
+                "session_project_required",
+                "Research in a session must name a project (`project_id`).",
+                session_id="s1",
+            )
+        )
+        with pytest.raises(SessionProjectRequiredError) as caught:
+            client.knowledge.research("What changed?")
+    assert caught.value.session_id == "s1"
+    assert caught.value.code == "session_project_required"
+    assert caught.value.required_scope is None
 
 
 def test_a_write_outside_a_session_is_session_required(client):
