@@ -244,6 +244,17 @@ class CrossProjectOwnerRequiredError(_ProjectIsolationError):
     """
 
 
+class SessionProjectRequiredError(_ProjectIsolationError):
+    """403 ``session_project_required``: a call in a session must name a project.
+
+    A session is confined to its projects, so a call that would run across all of
+    them (research, a document search, an upload or folder without a project...)
+    is refused. Pass one of the session's projects (``GET /v1/sessions/current``
+    lists them) and repeat the call for each project you need. It used to be
+    answered as ``insufficient_scope``.
+    """
+
+
 class _SessionScopeError(PermissionDeniedError):
     """A refusal about a session's projects; ``picker_url`` is where the person changes them."""
 
@@ -287,6 +298,7 @@ _FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
     "session_locked_to_project": SessionLockedToProjectError,
     "cross_project_write_refused": CrossProjectWriteRefusedError,
     "cross_project_owner_required": CrossProjectOwnerRequiredError,
+    "session_project_required": SessionProjectRequiredError,
 }
 
 
