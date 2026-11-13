@@ -95,8 +95,20 @@ class Projects(Resource[M]):
         *,
         description: str | None = None,
         tags: builtins.list[str] | None = None,
+        boundary: dict[str, str] | None = None,
+        boundary_preset: str | None = None,
     ) -> Any:
-        body = clean_body({"name": name, "description": description, "tags": tags})
+        """Create a project. Without ``boundary`` or ``boundary_preset`` (one, not both) it
+        starts with the organization's ``default_boundary``."""
+        body = clean_body(
+            {
+                "name": name,
+                "description": description,
+                "tags": tags,
+                "boundary": boundary,
+                "boundary_preset": boundary_preset,
+            }
+        )
         return self._run(ops.build_projects_create_project(body=body))
 
     def update(
@@ -107,11 +119,50 @@ class Projects(Resource[M]):
         description: str | None = None,
         status: str | None = None,
         tags: builtins.list[str] | None = None,
+        boundary: dict[str, str] | None = None,
+        boundary_preset: str | None = None,
     ) -> Any:
+        """Change the fields given. ``boundary`` (``{content_out, content_in}``; a key
+        left out keeps its value) or ``boundary_preset`` (``internal``, ``siloed`` or
+        ``leadership``) changes the project's boundary: an owner or admin of the
+        project, or an organization admin, acting as a person
+        (:meth:`set_boundary`)."""
         body = clean_body(
-            {"name": name, "description": description, "status": status, "tags": tags}
+            {
+                "name": name,
+                "description": description,
+                "status": status,
+                "tags": tags,
+                "boundary": boundary,
+                "boundary_preset": boundary_preset,
+            }
         )
         return self._run(ops.build_projects_update_project(project_id, body=body))
+
+    def set_boundary(
+        self,
+        project_id: str,
+        *,
+        content_out: str | None = None,
+        content_in: str | None = None,
+        preset: str | None = None,
+    ) -> Any:
+        """Set the project's boundary: a ``preset`` (``internal``, ``siloed``,
+        ``leadership``), or ``content_out`` (``allowed``, ``locked``) and/or
+        ``content_in`` (``allowed``, ``owner_approves``, ``blocked``); a value not
+        given keeps its own. Returns the project, whose ``boundary`` is the one in
+        force (raised to the organization's minimum, ``raised_by_minimum``).
+
+        Below the minimum raises :class:`~beakr_sdk.errors.BoundaryBelowMinimumError`.
+        """
+        if preset is not None:
+            if content_out is not None or content_in is not None:
+                raise ValueError("Give a preset or content_out/content_in, not both.")
+            return self.update(project_id, boundary_preset=preset)
+        change = clean_body({"content_out": content_out, "content_in": content_in})
+        if not change:
+            raise ValueError("Give a preset, or content_out and/or content_in.")
+        return self.update(project_id, boundary=change)
 
     def archive(self, project_id: str) -> Any:
         """Archive (reversible); ``update(status="active")`` restores it."""
@@ -119,7 +170,8 @@ class Projects(Resource[M]):
 
     @returns(ops.build_projects_get_cross_project_guard)
     def cross_project_guard(self, project_id: str) -> Any:
-        """What the project does with writes that bring in content from other projects.
+        """Deprecated (one release): the project's ``boundary.content_in`` in the old
+        guard's words. Use :meth:`get` and its ``boundary``.
 
         ``effective`` is ``allow``, ``hold`` (an owner or admin accepts them) or
         ``refuse``: the project's ``override``, else ``org_default``.
@@ -128,9 +180,11 @@ class Projects(Resource[M]):
 
     @returns(ops.build_projects_set_cross_project_guard)
     def set_cross_project_guard(self, project_id: str, override: str | None) -> Any:
-        """Set the project's own guard (``allow``, ``hold``, ``refuse``); ``None`` follows the org.
+        """Deprecated (one release): use :meth:`set_boundary` with ``content_in``.
 
-        An owner or admin of the project acting as a person may change it.
+        ``allow``, ``hold`` and ``refuse`` set ``content_in`` to ``allowed``,
+        ``owner_approves`` and ``blocked``; ``None`` to ``allowed``. An owner or
+        admin of the project acting as a person may change it.
         """
         body = {"override": override}
         return self._run(ops.build_projects_set_cross_project_guard(project_id, body=body))  # type: ignore[arg-type]

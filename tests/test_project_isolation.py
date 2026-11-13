@@ -326,14 +326,16 @@ def test_a_held_write_is_a_normal_result_that_says_why(client):
 
 def test_the_settings_and_a_projects_guard_send_only_what_changes(client):
     settings = {
-        "session_mode": "auto_lock",
-        "auto_lock_counts_search_results": True,
+        "session_mode": "automatic",
+        "default_boundary": {"content_out": "allowed", "content_in": "allowed"},
+        "minimum_boundary": None,
         "agent_writes_require_session": True,
-        "cross_project_guard": "hold",
+        "presets": [],
         "available": {
             "server_agent_sessions": True,
-            "session_auto_lock": True,
+            "project_boundaries": True,
             "agent_writes_require_session": True,
+            "session_auto_lock": False,
             "cross_project_guard": True,
         },
         "can_change": True,
@@ -357,12 +359,12 @@ def test_the_settings_and_a_projects_guard_send_only_what_changes(client):
         set_guard = router.put("/v1/projects/pb/cross-project-guard").mock(
             return_value=httpx.Response(200, json=guard)
         )
-        assert client.project_isolation.update(session_mode="auto_lock") == settings
+        assert client.project_isolation.update(session_mode="automatic") == settings
         client.projects.set_cross_project_guard("pb", None)
         client.projects.set_cross_project_guard("pb", "refuse")
     # The active organization's, looked up first.
     assert active.call_count == 1
-    assert json.loads(put.calls[0].request.content) == {"session_mode": "auto_lock"}
+    assert json.loads(put.calls[0].request.content) == {"session_mode": "automatic"}
     # None is sent: it clears the project's own guard, so it follows the org.
     assert [json.loads(c.request.content) for c in set_guard.calls] == [
         {"override": None},
