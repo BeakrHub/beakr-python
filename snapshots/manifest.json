@@ -2,13 +2,13 @@
   "sources": {
     "beakr-engine": {
       "repository": "BeakrHub/beakr-engine",
-      "commit": "aa39f0388f062640ca6d4d26fa6c73efd4513543",
+      "commit": "1dcd002db388af4aebd8481157a59e25d9599a7a",
       "uncommitted_changes": false,
       "files": {
         "beakr/api/public/compat.py": "sha256:1b89503c00b6e5451ff3ad02e8e8b8016d4dd0a5f9220717d1649d52e6deb7ee",
         "derived/replaying-creates.json": "sha256:3f5ed588827d6eaced8e9ef0c10b6d8cc9a9dd4b9ee66152e1e16bf9efc2b38a",
-        "docs/api/CHANGELOG.md": "sha256:60c223baddc8df80071560de8be066983d85e45bb7bdf61140ba586c2fa90396",
-        "docs/api/public-openapi.json": "sha256:d43da83f4a9583b81afd04a3028e4e431077f1c75179d75117e6dc1c41611d39",
+        "docs/api/CHANGELOG.md": "sha256:fbc7952216a12896088b29c583cbc2ff6b69bbe95eff3e56be42729a781bccf2",
+        "docs/api/public-openapi.json": "sha256:e9c8499ffbde9a24f13662273668a595c597b7321e98b99b0d202180358dad30",
         "docs/api/still-served-openapi.json": "sha256:0a7c2dbca8e8ba0ed938ad861a65b896dd4d77dcbd7f088b291454f5ff3122b9",
         "release-base/e464bf209d200147486b6b99c9998f59a7090775/docs/api/CHANGELOG.md": "sha256:8cf9a3c23247d737f8f855cd44f80478c716f14446b32937ab81cb2c4875a4d2",
         "release-base/e464bf209d200147486b6b99c9998f59a7090775/docs/api/public-openapi.json": "sha256:62df6eb6d684926b122000636ef3719b72a85c1ab9c5de622d2b07518e90b5bb"
@@ -16,7 +16,7 @@
     },
     "beakr-typescript": {
       "repository": "BeakrHub/beakr-typescript",
-      "commit": "0460ff0ab7c7ad14dd9669cd1f5135b8b991fd2d",
+      "commit": "d7a866ceae61bf94d2b95eacc55a0f51464ac835",
       "uncommitted_changes": false,
       "files": {
         "src/replay.ts": "sha256:a5f9cdf59930ddc618cde15f7d5ce13ec67a9b2d166b867959156aef05a04a48"
