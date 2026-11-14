@@ -1,4 +1,4 @@
-"""Confirm before entering a locked project (engine ``max/lock-confirm``).
+"""Confirm before entering a locked project, and the routes a session cannot call.
 
 An automatic session that already worked in another project is held on its first
 touch of a locked project: ``409 session_lock_confirm``, nothing read or written.
@@ -116,3 +116,20 @@ async def test_the_async_client_confirms_per_task(async_client):
         await asyncio.gather(confirmed(), plain())
     sent = sorted(str(call.request.headers.get(CONFIRM_LOCK_HEADER)) for call in me.calls)
     assert sent == sorted([A, "None"])
+
+
+def test_a_route_a_session_cannot_call_raises_its_own_error(client):
+    from beakr_sdk import PermissionDeniedError, SessionRouteUnavailableError
+
+    message = "A write's read trail is not served inside a session."
+    body = {"code": "session_route_unavailable", "message": message, "fix": "Ask as yourself."}
+    response = httpx.Response(
+        403, json={"detail": {**body, "session_id": "s1"}, "error": dict(body)}
+    )
+    with respx.mock(base_url=BASE) as router:
+        router.get("/v1/me").mock(return_value=response)
+        with pytest.raises(SessionRouteUnavailableError) as caught:
+            client.me.get()
+    assert isinstance(caught.value, PermissionDeniedError)
+    assert caught.value.code == "session_route_unavailable"
+    assert caught.value.session_id == "s1"
