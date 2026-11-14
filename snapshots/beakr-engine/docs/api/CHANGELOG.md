@@ -11,10 +11,32 @@ decision records, repository paths and review identifiers out of it; they
 belong in the internal technical docs. tests/unit/test_public_docs_hygiene.py
 enforces this. -->
 
-<!-- contract-stamp: public-openapi sha256=85780d2ae2a1d7cea1409061b95d4d7fd5d5e66be496f17ae8dd96ac5bd37f36 changelog sha256=36a1f73aa295e83da4345ad67f4af5ed184c4470f25115079cdc515402269fd6 -->
+<!-- contract-stamp: public-openapi sha256=4ada196f59cf99d96c212582131b90f0b36cf1adc8d3ca0730cdb7aad4fa90b3 changelog sha256=dcdb0ebc85eabea89e6772f0f6d2433dd0455c6515c8287e5566478936a1898f -->
 ## 1.0.0 (unreleased)
 
 The first public version.
+
+- `GET /v1/knowledge/rows`: each row's `citations` now name a file you can
+  open by `beakr-source:v1:file:<file id>` and a connected item you can reach
+  by `beakr-source:v1:item:<item id>`, the references Knowledge reads give
+  them.
+- `POST /v1/knowledge/wiki/command` `sections` with no `scope`: a strong match
+  in a small project you can read now reaches the ranking even when larger
+  projects hold more similar wording. When the search still left projects
+  unread, `next` says it sampled, and `next_calls` holds the same search with
+  `scope`.
+- `POST /v1/knowledge/wiki/command` `cat` with `outline`: the text is now the
+  outline as lines (each section's title, `section_id`, page lines and size,
+  then the page's edges), and the new `outline` field holds the same data.
+- `POST /v1/knowledge/wiki/command` `rows`, `sections` and `grep`: a file the
+  compiler skipped is no longer counted among the files Knowledge was compiled
+  from, and `coverage.corpus` gains `skipped`. An unscoped `sections` reply's
+  "Not shown" lines name each page's project when the results span projects.
+- `POST /v1/knowledge/wiki/command` `log` and `proposals`: the new `session`
+  option keeps the revisions and proposals whose recorded client session
+  starts with it.
+- `POST /v1/knowledge/wiki/command` `sources`: a document's size line counts
+  the file's own text for pages compiled from now on.
 
 - `POST /v1/knowledge/wiki/command`, `POST /v1/knowledge/wiki/write`,
   `POST /v1/knowledge/documents`, `POST /v1/artifacts/read` and

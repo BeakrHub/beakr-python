@@ -17364,6 +17364,20 @@
             "$ref": "#/components/schemas/WikiToolOutcome",
             "description": "How it turned out."
           },
+          "outline": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "`cat` with `outline` only: the page's outline as data (`title`, `page_type`, `revision`, `summary`, `sections` with each `section_id`, `title`, `lines`, `chars` and `citations`, and `edges`). The text prints the same outline as lines.",
+            "title": "Outline"
+          },
           "query": {
             "anyOf": [
               {
