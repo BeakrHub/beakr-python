@@ -426,6 +426,65 @@ class SessionEndedError(ConflictError):
     """
 
 
+#: The request header that confirms entering the locked projects it names (ids,
+#: comma-separated): what a :class:`SessionLockConfirmError` asks to be repeated with.
+CONFIRM_LOCK_HEADER = "X-Beakr-Confirm-Lock"
+
+
+class SessionLockConfirmError(ConflictError):
+    """409 ``session_lock_confirm``: entering this locked project would cost the session.
+
+    An automatic session that already read or wrote another project is about to
+    touch a project that keeps its content in: entering it would limit the
+    session's writes to it (or, as a second such project, leave none). Nothing
+    was read, written or recorded. ``project`` is ``{id, name}``, ``cost`` what
+    entering takes away ("can no longer write to Research (written earlier in this
+    session)"), and ``confirm_lock`` the id to confirm. To go in, repeat the call
+    inside ``with client.confirming_lock(error.confirm_lock):`` (it sends
+    :data:`CONFIRM_LOCK_HEADER`); or ask the user, or start a new session.
+    """
+
+    def _extra(self, key: str) -> Any:
+        # Beside ``code`` in the envelope and in ``detail``, as other session refusals.
+        holders: list[Any] = [self.details]
+        if isinstance(self.body, dict):
+            holders += [self.body.get("error"), self.body.get("detail")]
+        for holder in holders:
+            if isinstance(holder, dict) and holder.get(key) is not None:
+                return holder[key]
+        return None
+
+    @property
+    def project(self) -> dict[str, Any] | None:
+        value = self._extra("project")
+        return value if isinstance(value, dict) else None
+
+    @property
+    def project_id(self) -> str | None:
+        value = (self.project or {}).get("id")
+        return str(value) if value else None
+
+    @property
+    def project_name(self) -> str | None:
+        value = (self.project or {}).get("name")
+        return str(value) if value else None
+
+    @property
+    def cost(self) -> str | None:
+        value = self._extra("cost")
+        return value if isinstance(value, str) else None
+
+    @property
+    def confirm_lock(self) -> str | None:
+        value = self._extra("confirm_lock") or self.project_id
+        return str(value) if value else None
+
+    @property
+    def session_id(self) -> str | None:
+        value = self._extra("session_id")
+        return str(value) if value else None
+
+
 class ValidationError(BeakrError):
     """400 or 422: the request was malformed or failed validation."""
 
@@ -821,6 +880,8 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
             return SessionEndedError(message, **common)
         if code == "session_already_started":
             return SessionAlreadyStartedError(message, **common)
+        if code == "session_lock_confirm":
+            return SessionLockConfirmError(message, **common)
         return ConflictError(message, **common)
     if status == 429:
         return RateLimitError(

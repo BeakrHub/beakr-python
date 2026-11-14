@@ -25,6 +25,7 @@ from beakr_sdk.async_client import AsyncBeakr
 from beakr_sdk.capabilities import Capabilities
 from beakr_sdk.client import Beakr
 from beakr_sdk.errors import (
+    CONFIRM_LOCK_HEADER,
     APIConnectionError,
     AuthenticationError,
     BeakrError,
@@ -44,6 +45,7 @@ from beakr_sdk.errors import (
     ServerError,
     SessionAlreadyStartedError,
     SessionEndedError,
+    SessionLockConfirmError,
     SessionLockedToProjectError,
     SessionNeedsSelectionError,
     SessionProjectRequiredError,
@@ -61,6 +63,7 @@ from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources.knowledge import cross_project_hold
 
 __all__ = [
+    "CONFIRM_LOCK_HEADER",
     "APIConnectionError",
     "AsyncBeakr",
     "AuthenticationError",
@@ -86,6 +89,7 @@ __all__ = [
     "ServerError",
     "SessionAlreadyStartedError",
     "SessionEndedError",
+    "SessionLockConfirmError",
     "SessionLockedToProjectError",
     "SessionNeedsSelectionError",
     "SessionProjectRequiredError",
