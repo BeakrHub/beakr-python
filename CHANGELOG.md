@@ -7,6 +7,29 @@ Each release lists the public API changes it supports, taken from the API change
 
 ### Changes
 
+- `POST /v1/knowledge/wiki/command` `sources`: `next_calls` now names the read
+  of each of the first five sources the reply lists, in listing order, one per
+  document: `read_file` with `artifact_id` set to the source's reference and
+  the first place cited in it (`memo.pdf › p. 7`), or, for a connected item,
+  the `integrations` call its `retrieval` gives, exactly. The placeholder
+  calls remain only when no listed source has a call, and the `read_file` one
+  now names its argument `artifact_id` (it named `reference`, which
+  `read_file` does not take). Every `next_calls` entry has a non-empty `why`.
+- `POST /v1/knowledge/wiki/command` (`log`, `blame`, `sources`, `provenance`)
+  and `POST /v1/knowledge/wiki/write`: who wrote something reads the same way
+  everywhere. A person's own write through a client with no agent names the
+  person first and the client as the way it came: `Dana Reyes, via
+  beakr-cli 0.6.0, session 7f3c21d0` (it read `beakr-cli/0.6.0 for Dana
+  Reyes`). A write from a hosted MCP client recorded under its client
+  metadata URL reads as the client's name (`Claude (claude.ai) for Dana
+  Reyes, via the hosted MCP server`). A revision Beakr compiled reads `Beakr
+  compiler (gpt-6-luna) for Dana Reyes, from a source sent via beakr-cli
+  0.6.0` (it read `gpt-6-luna (for Dana Reyes via beakr-cli/0.6.0)`). The
+  stored values and the `by`, `via`, `kind` and `session` filters are
+  unchanged.
+- `GET /v1/knowledge/wiki/pages/{page_id}/revisions`: `writer` is now set for
+  a revision Beakr wrote (a compile or a maintenance run), in the words above;
+  it was `null`.
 - `POST /v1/knowledge/wiki/command` `sections` with no `scope`: a strong match
   in a small project you can read now reaches the ranking even when larger
   projects hold more similar wording. When the search still left projects
@@ -478,7 +501,6 @@ Each release lists the public API changes it supports, taken from the API change
 - `POST /v1/knowledge/wiki/command` with `command: "rows"` and `group_by`:
   a group's `numbers`, `sum`, `min` and `max` count only values that state a
   quantity (`45 mg`, `$55 million`), not digits inside names or ids.
-
 - `POST /v1/knowledge/wiki/command` `cat` with `section_id` returns the section
   as text: a header line (page id, section id, revision, page lines), the
   section with each citation as a readable reference (`memo.pdf › p. 7`), and
@@ -500,21 +522,6 @@ Each release lists the public API changes it supports, taken from the API change
   when the organization requires it for sensitive actions. Project deletion
   permissions still apply. Keys and tokens remain blocked with
   `403 session_required` in organizations requiring enterprise SSO.
-
-- Enterprise single sign-on state on organizations: `GET /v1/organizations`,
-  `GET /v1/organizations/{org_id}` and `GET /v1/me/organization` return
-  `sso_required`, `sso_satisfied` (whether the calling session meets the
-  requirement; always `true` when none is required), and, when single sign-on
-  is required, `enterprise_sso_connection_id` (the identity provider's
-  connection id, not a Beakr UUID) and `sso_provider`. A web session that has
-  not signed in through a required connection is refused with `403` and
-  `detail.error_type: enterprise_sso_required`; keys and tokens are not
-  sessions and keep their own scopes, but in an organization that requires
-  single sign-on they answer `403 session_required` to every action that needs
-  step-up (creating service-account keys or service accounts, changing
-  roles or the authentication policy), and to project deletion independently
-  of the step-up setting.
-
 - Project isolation, for organizations whose projects must not write into one
   another (each part is available where the organization has it turned on;
   `GET /v1/organizations/{org_id}/project-isolation` returns which parts are on, under `available`):
@@ -764,6 +771,22 @@ Each release lists the public API changes it supports, taken from the API change
   deleting files: a `blocked` result can include applied changes, and HTTP 200
   is not proof that every contribution was removed. An unknown source returns
   `noop`. `Idempotency-Key` retries replay the original outcome for 24 hours.
+
+### Organization administration
+
+- Enterprise single sign-on state on organizations: `GET /v1/organizations`,
+  `GET /v1/organizations/{org_id}` and `GET /v1/me/organization` return
+  `sso_required`, `sso_satisfied` (whether the calling session meets the
+  requirement; always `true` when none is required), and, when single sign-on
+  is required, `enterprise_sso_connection_id` (the identity provider's
+  connection id, not a Beakr UUID) and `sso_provider`. A web session that has
+  not signed in through a required connection is refused with `403` and
+  `detail.error_type: enterprise_sso_required`; keys and tokens are not
+  sessions and keep their own scopes, but in an organization that requires
+  single sign-on they answer `403 session_required` to every action that needs
+  step-up (creating service-account keys or service accounts, changing
+  roles or the authentication policy), and to project deletion independently
+  of the step-up setting.
 
 ### Client changes
 
