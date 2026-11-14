@@ -224,7 +224,7 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   waiting for a person), `bulk_uploads`, `folders`, `knowledge` (with `pages`,
   `proposals` and `agent_review`), `runs`,
   `interviews`, `threads`, `conversations`, `engine` (`context`, `compound`)
-  and `integrations` (with `tools` and `call_tool`).
+  and `integrations` (with `tools` and `call_tool`, also named `call`).
 - **Documented routes only**: this package sends nothing outside the documented
   contract (`tests/test_shipped_surface.py` builds the wheel and fails on any
   other route in it). The API still serves some routes it no longer documents,

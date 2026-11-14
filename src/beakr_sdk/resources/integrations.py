@@ -6,7 +6,8 @@ or token (``integrations:read`` / ``integrations:admin``).
 
 The caller's connected integrations can be queried the way Beakr's own agent
 does: :meth:`Integrations.tools` lists the read-only tools for them and
-:meth:`Integrations.call_tool` runs one.
+:meth:`Integrations.call_tool` runs one (:meth:`Integrations.call` is the same
+method under the name the MCP ``integrations`` tool and the CLI give it).
 
 Example::
 
@@ -95,3 +96,17 @@ class Integrations(Resource[M]):
         if connector_id is not None:
             body["connector_id"] = connector_id
         return self._run(ops.build_integrations_call_integration_tool(name, body=body))
+
+    def call(
+        self,
+        name: str,
+        arguments: Mapping[str, Any] | None = None,
+        *,
+        connector_id: str | None = None,
+    ) -> Any:
+        """:meth:`call_tool` by the name ``integrations command='call'`` and ``beakr
+        integrations call`` give it: ``beakr.integrations.call("granola_get_note",
+        {"note_id": "not_..."})``. A source record's :func:`beakr_sdk.sources.read_call`
+        is exactly these arguments.
+        """
+        return self.call_tool(name, arguments, connector_id=connector_id)
