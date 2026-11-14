@@ -287,7 +287,7 @@ class Knowledge(Resource[M]):
 
     def query(
         self,
-        spec: QuerySpec | None = None,
+        spec: QuerySpec | str | None = None,
         *,
         sql: str | None = None,
         cursor: str | None = None,
@@ -302,7 +302,8 @@ class Knowledge(Resource[M]):
         findings, up to two ``JOIN`` s on ``SAME_CARD(a)`` or ``TARGET_CARD(a)``,
         ``WHERE`` with AND/OR/NOT, ``AS OF`` a day, ``GROUP BY``, ``COUNT``, ``MIN``,
         ``MAX``, ``SUM``, ``AVG``, ``ORDER BY`` and ``LIMIT``. ``spec`` is the same
-        query as JSON (see :mod:`beakr_sdk.query_spec`). Send one of them. Only
+        query as JSON (see :mod:`beakr_sdk.query_spec`). Send one of them; SQL may
+        also be the first argument (``knowledge.query("SELECT ...")``). Only
         cards you can read are queried; ``scope`` narrows them to one project
         (name or id); ``cursor`` continues a previous answer. Where enabled for the
         organization.
@@ -314,6 +315,12 @@ class Knowledge(Resource[M]):
         the engine cannot run raises :class:`KnowledgeCommandError`
         (``invalid_arguments``).
         """
+        if isinstance(spec, str):
+            # The SQL passed positionally: `dict("SELECT ...")` raised "dictionary
+            # update sequence element #0 has length 1" (sandbox run, 2026-11-14).
+            if sql is not None:
+                raise ValueError("query takes sql or spec, not both and not neither")
+            spec, sql = None, spec
         if (spec is None) == (sql is None):
             raise ValueError("query takes sql or spec, not both and not neither")
         arguments: dict[str, Any] = {"sql": sql} if sql is not None else {"spec": dict(spec)}

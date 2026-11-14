@@ -3,6 +3,19 @@
 Releases of `beakr-sdk`, the Beakr Python SDK (`import beakr_sdk`).
 Each release lists the public API changes it supports, taken from the API changelog.
 
+## Unreleased
+
+### Client changes
+
+- `knowledge.query("SELECT ...")` takes the SQL as its first argument, as well
+  as `sql=`; it raised `ValueError: dictionary update sequence element #0 has
+  length 1`.
+- `integrations.call(tool, arguments)`: `call_tool` under the name the MCP
+  `integrations` tool and `beakr integrations call` give it.
+- `beakr_sdk.sources.read_call(record)`: the `(tool, arguments)` that re-read
+  a public source record's connected item, or `None` for a file; the module
+  docstring shows re-reading every source a Knowledge read cites.
+
 ## beakr-sdk 0.3.0 (2026-11-13)
 
 ### Changes
