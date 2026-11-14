@@ -28,7 +28,13 @@ wherever the source came from::
       "excerpts": [{"citation_key", "section_id", "unit_locator", "text"}],  # compact reads
       "cited_passages": 3,                   # compact reads: passages of it the page cites
       "filed_by": {"user_name", "agent", "client", "run", "session", "text"},
+      "retrieval": {"tool": "granola_get_note", "arguments": {"note_id": "not_..."}},
     }
+
+``retrieval`` is the call that re-reads a connected item. For a meeting note, an
+email or a Slack thread it is the provider's read tool and that item's own id:
+pass both to ``integrations.call_tool(tool, arguments)``. For a connector file it
+carries a download ``handle`` and nothing else.
 
 ``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
 ``user_note`` citation, by name only: never the person's ``user_id``, which the
@@ -155,19 +161,9 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         item["excerpts"] = excerpts
     if isinstance(source.get("cited_passages"), int):
         item["cited_passages"] = source["cited_passages"]
-    retrieval_tool = public_retrieval.get("tool")
-    retrieval_args = public_retrieval.get("arguments")
-    if (
-        isinstance(retrieval_tool, str)
-        and retrieval_tool
-        and isinstance(retrieval_args, dict)
-        and isinstance(retrieval_args.get("handle"), str)
-        and retrieval_args["handle"]
-    ):
-        item["retrieval"] = {
-            "tool": retrieval_tool,
-            "arguments": {"handle": retrieval_args["handle"]},
-        }
+    retrieval = _public_retrieval(public_retrieval)
+    if retrieval:
+        item["retrieval"] = retrieval
     # Who wrote an inline citation; a page sources row carries it in ``meta``.
     filed_by = first("filed_by")
     if isinstance(filed_by, dict):
@@ -179,6 +175,36 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         if public_filed:
             item["filed_by"] = public_filed
     return {key: value for key, value in item.items() if value not in (None, "")}
+
+
+def _public_retrieval(retrieval: dict[str, Any]) -> dict[str, Any] | None:
+    """The call that re-reads a connected item, in its public form, or ``None``.
+
+    A connector file's retrieval keeps its download ``handle`` and nothing else.
+    A text connector's item (a Granola note, an email or Slack thread) keeps the
+    provider read tool and its scalar arguments, as the engine's
+    ``native_source_fetch.public_native_call`` forwards them: the item's share
+    link carries a different id that the read tool refuses, so dropping the call
+    left a caller with no way to re-read the item. The API has already limited
+    the tool to a known read; anything nested or empty is still dropped here.
+    """
+    tool = retrieval.get("tool")
+    arguments = retrieval.get("arguments")
+    if not isinstance(tool, str) or not tool or not isinstance(arguments, dict) or not arguments:
+        return None
+    handle = arguments.get("handle")
+    if "handle" in arguments:
+        if isinstance(handle, str) and handle:
+            return {"tool": tool, "arguments": {"handle": handle}}
+        return None
+    clean: dict[str, Any] = {}
+    for name, value in arguments.items():
+        if not isinstance(name, str) or isinstance(value, bool):
+            return None
+        if not isinstance(value, (str, int)) or value == "":
+            return None
+        clean[name] = value
+    return {"tool": tool, "arguments": clean}
 
 
 def _object(source: dict[str, Any], key: str) -> dict[str, Any]:
