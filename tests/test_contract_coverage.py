@@ -127,8 +127,11 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/organizations/{}/project-isolation", lambda c: c.project_isolation.get(org_id=ORG)),
     (
         "PUT /v1/organizations/{}/project-isolation",
-        lambda c: c.project_isolation.update(session_mode="auto_lock", org_id=ORG),
+        lambda c: c.project_isolation.update(session_mode="must_pick", org_id=ORG),
     ),
+    ("POST /v1/sessions/options", lambda c: c.sessions.options(read=["p1"])),
+    ("GET /v1/sessions/current/status", lambda c: c.sessions.status()),
+    ("GET /v1/sessions/{}/status", lambda c: c.sessions.status("s1")),
     ("GET /v1/projects/{}/cross-project-guard", lambda c: c.projects.cross_project_guard("p1")),
     ("GET /v1/sessions/{}/trail", lambda c: c.sessions.trail("s1")),
     ("GET /v1/knowledge/wiki/proposals/{}/trail", lambda c: c.knowledge.proposals.trail("pr1")),

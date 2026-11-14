@@ -177,12 +177,13 @@ class _ProjectIsolationError(PermissionDeniedError):
 
 
 class SessionReadOnlyError(_ProjectIsolationError):
-    """403 ``session_read_only``: the session read two projects, so it may no longer write.
+    """403 ``session_read_only``: the session may no longer write.
 
-    With auto-lock on, a session that reads a second project becomes read-only
-    for the rest of its life; reads keep working. Start a new session (a new
-    client, or ``client.session()``) and work in one project.
-    ``touched_projects`` lists the projects it read, ``{id, name}`` each.
+    Project boundaries' rule A: a session that touched two projects whose
+    boundary keeps their content in (``content_out: locked``) is read-only for
+    the rest of its life, and a ``read_everything`` session never writes. Reads
+    keep working. Start a new session (a new client, or ``sessions.start()``) to
+    write. ``touched_projects`` lists the projects it touched, ``{id, name}`` each.
     """
 
     @property
@@ -197,10 +198,11 @@ class SessionReadOnlyError(_ProjectIsolationError):
 class SessionLockedToProjectError(_ProjectIsolationError):
     """403 ``session_locked_to_project``: the session writes one project and this is another.
 
-    With auto-lock on, the first project a session touches becomes its only
-    write project. ``write_project`` is that project and ``refused_projects``
-    the ones this write tried, ``{id, name}`` each. Start a new session to
-    write them.
+    Project boundaries' rule A: once a session touches (reads or writes) a
+    project whose boundary keeps its content in (``content_out: locked``), it may
+    write only to that project. ``write_project`` is that project and
+    ``refused_projects`` the ones this write tried, ``{id, name}`` each. Start a
+    new session to write them.
     """
 
     @property
@@ -215,10 +217,11 @@ class SessionLockedToProjectError(_ProjectIsolationError):
 class CrossProjectWriteRefusedError(_ProjectIsolationError):
     """403 ``cross_project_write_refused``: the project does not take content from others.
 
-    The write cites a source from another project, or its session read another
-    project, and the target's cross-project guard is ``refuse``. ``project`` is
-    the target; ``other_projects`` the projects the content came from, each
-    ``{id, name, via}`` with ``via`` among ``cited`` and ``read_in_session``.
+    The target's boundary is ``content_in: blocked`` (rule B), and the write
+    cites, copies or moves content from another project, or its session read
+    another project. Nothing was written. ``project`` is the target;
+    ``other_projects`` the projects the content came from, each ``{id, name,
+    via}`` with ``via`` among ``cited`` and ``read_in_session``.
     """
 
     @property
@@ -237,11 +240,30 @@ class CrossProjectWriteRefusedError(_ProjectIsolationError):
 class CrossProjectOwnerRequiredError(_ProjectIsolationError):
     """403 ``cross_project_owner_required``: only an owner or admin of the project may do this.
 
-    The project's cross-project guard is ``hold``: a proposal bringing in
-    content from another project waits for an owner or admin of it, and a
+    The project's boundary is ``content_in: owner_approves``: a proposal bringing
+    in content from another project waits for an owner or admin of it, and a
     write that commits without a proposal is refused. Stage it as a proposal
     instead, and ask an owner or admin to accept it.
     """
+
+
+class ProjectContentLockedError(_ProjectIsolationError):
+    """403 ``project_content_locked``: the write carries a locked project's content elsewhere.
+
+    A write to one project that cites, copies or moves content from another
+    whose boundary keeps its content in (``content_out: locked``) is refused, for
+    sessions and people alike. Nothing was written. Remove what comes from that
+    project, or write it there. ``project`` names the target where the API gives
+    it, and ``other_projects`` the locked projects the content came from.
+    """
+
+    @property
+    def project(self) -> dict[str, Any] | None:
+        return _project(self.details, "project")
+
+    @property
+    def other_projects(self) -> list[dict[str, Any]]:
+        return _projects(self.details, "other_projects")
 
 
 class SessionProjectRequiredError(_ProjectIsolationError):
@@ -299,6 +321,7 @@ _FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
     "cross_project_write_refused": CrossProjectWriteRefusedError,
     "cross_project_owner_required": CrossProjectOwnerRequiredError,
     "session_project_required": SessionProjectRequiredError,
+    "project_content_locked": ProjectContentLockedError,
 }
 
 
@@ -386,6 +409,15 @@ class ProjectProfileRequiredError(ConflictError):
         return str(value) if value else None
 
 
+class SessionAlreadyStartedError(ConflictError):
+    """409 ``session_already_started``: the session has already worked in a project.
+
+    A session's projects (or ``read_everything``) are declared before it reads
+    or writes anything; after that its mode and lists can't be chosen again.
+    Start a new session (a new client, or ``sessions.start()``) to choose them.
+    """
+
+
 class SessionEndedError(ConflictError):
     """409 ``session_ended``: the session this client's ``X-Beakr-Session`` names has ended.
 
@@ -396,6 +428,55 @@ class SessionEndedError(ConflictError):
 
 class ValidationError(BeakrError):
     """400 or 422: the request was malformed or failed validation."""
+
+
+class SessionSelectionInvalidError(ValidationError):
+    """422 ``session_selection_invalid``: picked lists that break a project boundary.
+
+    ``reasons`` gives every failing rule, ``{code, message, project_ids}`` each,
+    with ``code`` among ``locked_read_limits_writes``,
+    ``locked_reads_make_read_only`` and ``blocked_write_limits_reads``.
+    ``sessions.options()`` says which projects can be read and written with a
+    given choice before starting.
+    """
+
+    @property
+    def reasons(self) -> list[dict[str, Any]]:
+        value = self.details.get("reasons")
+        return [r for r in value if isinstance(r, dict)] if isinstance(value, list) else []
+
+    @property
+    def reason_messages(self) -> list[str]:
+        return [str(r["message"]) for r in self.reasons if r.get("message")]
+
+
+class BoundaryBelowMinimumError(ValidationError):
+    """422 ``boundary_below_minimum``: a boundary set below the organization's minimum.
+
+    ``minimum`` is the organization's floor (``{content_out, content_in}``; a
+    missing key has none). Choose a boundary at or above it, or ask an
+    organization admin to lower it.
+    """
+
+    @property
+    def minimum(self) -> dict[str, Any] | None:
+        return _project(self.details, "minimum")
+
+
+class SettingRetiredError(ValidationError):
+    """422 ``setting_retired``: a project isolation setting project boundaries replaced.
+
+    ``cross_project_guard``, ``auto_lock_counts_search_results`` and the session
+    modes ``picker`` and ``auto_lock``; the message says what to use instead.
+    """
+
+
+#: 422 codes with their own error type.
+_INVALID_TYPES: dict[str, type[ValidationError]] = {
+    "session_selection_invalid": SessionSelectionInvalidError,
+    "boundary_below_minimum": BoundaryBelowMinimumError,
+    "setting_retired": SettingRetiredError,
+}
 
 
 class RateLimitError(BeakrError):
@@ -720,7 +801,7 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     }
 
     if status in (400, 422):
-        return ValidationError(message, **common)
+        return _INVALID_TYPES.get(str(code), ValidationError)(message, **common)
     if status == 401:
         return AuthenticationError(message, **common)
     if status == 403:
@@ -738,6 +819,8 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
             return ProjectProfileRequiredError(message, **common)
         if code == "session_ended":
             return SessionEndedError(message, **common)
+        if code == "session_already_started":
+            return SessionAlreadyStartedError(message, **common)
         return ConflictError(message, **common)
     if status == 429:
         return RateLimitError(

@@ -23,13 +23,35 @@ Where the server keeps a session per agent conversation, no token is needed: a
 person's API key that sends ``X-Beakr-Session: <id>`` runs inside that person's
 session for the id, started on first use. Every client sends one (its
 ``session``, else ``BEAKR_SESSION``, else an id it makes once), so a script
-lands in one session, and auto-lock and the cross-project guard apply to it as
-to an agent. :meth:`Sessions.start` opens a fresh one for a block of work::
+lands in one session, and project boundaries apply to it as to an agent.
+:meth:`Sessions.start` opens a fresh one for a block of work::
 
     with beakr.sessions.start(label="nightly import") as s:
         s.client.knowledge.write(...)
-        print(s.current()["lock_state"])
+        print(s.status()["summary"])
     # ended here; the id is never used again
+
+Project boundaries. Each project has a ``boundary`` (``content_out``: ``allowed``
+or ``locked``; ``content_in``: ``allowed``, ``owner_approves`` or ``blocked``), and
+a session works one of three ways (``mode``):
+
+- ``automatic``: nothing declared; it starts open and the server tracks what it
+  touches. Touching a locked project locks its writes to that project
+  (``SessionLockedToProjectError`` elsewhere); a second one makes it read-only
+  (``SessionReadOnlyError``).
+- ``picked``: ``read`` and ``write`` lists declared at the start, checked against
+  the boundaries (``SessionSelectionInvalidError`` with every reason);
+  :meth:`Sessions.options` says which projects can be added before starting.
+- ``read_everything``: every project the person can read, locked ones included,
+  and no writes.
+
+A declaration is applied only while the session has touched nothing
+(``SessionAlreadyStartedError`` after). :meth:`Sessions.status` says where a
+session can still write, and why::
+
+    with beakr.sessions.start(read=[partner_a], write=[partner_a]) as s:
+        print(s.session["summary"])   # "Picked session: reads Partner A; writes Partner A."
+        print(s.status()["write"])
 """
 
 from __future__ import annotations
@@ -194,6 +216,10 @@ class AgentSession:
         """The session now: its lock state, write project and the projects it touched."""
         return self.client.sessions.current()
 
+    def status(self) -> Any:
+        """Where the session can still write, and why not elsewhere (:meth:`Sessions.status`)."""
+        return self.client.sessions.status()
+
     def trail(self, *, limit: int | None = None, cursor: str | None = None) -> Any:
         """One page of what the session read, newest first (:meth:`Sessions.trail`)."""
         return self.client.sessions.trail(self.id, limit=limit, cursor=cursor)
@@ -207,6 +233,11 @@ def _current_trail(limit: int | None, cursor: str | None) -> Flow:
     """One page of the read trail of the session the requesting client runs in."""
     current = yield ops.build_sessions_current_session()
     return (yield ops.build_sessions_session_trail(str(current["id"]), limit=limit, cursor=cursor))
+
+
+def _current_status() -> Call:
+    """The status of the session the requesting client runs in."""
+    return ops.build_sessions_current_session_status()
 
 
 def _end_current() -> Flow:
@@ -266,13 +297,18 @@ class Sessions(Resource[M]):
         folder: str | None = None,
         client_name: str | None = None,
         ttl_seconds: int | None = None,
+        read_everything: bool | None = None,
     ) -> Any:
         """Start a session and return a :class:`ScopedSession` with a client confined to it.
 
-        ``read`` and ``write`` are project ids; every write project is also read
-        (``write`` alone reads and writes the same projects). Give neither to leave
-        the choice to the person: the session is pending until they choose at
-        ``picker_url``.
+        ``read`` and ``write`` are project ids (a picked session); every write
+        project is also read (``write`` alone reads and writes the same projects).
+        Lists that break a project boundary raise
+        :class:`~beakr_sdk.errors.SessionSelectionInvalidError`.
+        ``read_everything=True`` reads every project the person can, locked ones
+        included, and writes none; it takes no lists. Give none of them for an
+        automatic session, or, where the organization makes every session pick, a
+        pending one the person chooses at ``picker_url``.
         """
         body = clean_body(
             {
@@ -281,6 +317,7 @@ class Sessions(Resource[M]):
                 "folder": folder,
                 "read_project_ids": read,
                 "write_project_ids": write,
+                "read_everything": read_everything,
                 "issue_token": True,
                 "ttl_seconds": ttl_seconds,
             }
@@ -321,32 +358,82 @@ class Sessions(Resource[M]):
     def get(self, session_id: str) -> Any:
         return self._run(ops.build_sessions_get_session(session_id))
 
-    def start(self, *, label: str | None = None, client_name: str | None = None) -> SessionScope:
+    def start(
+        self,
+        *,
+        label: str | None = None,
+        client_name: str | None = None,
+        read: builtins.list[str] | None = None,
+        write: builtins.list[str] | None = None,
+        read_everything: bool | None = None,
+    ) -> SessionScope:
         """A fresh session for a block of work, ended when the block ends.
 
         ``with beakr.sessions.start(label="import") as s:`` makes a new
         ``X-Beakr-Session`` id, starts that session on the server
         (``POST /v1/sessions`` with ``agent_session``) and gives ``s.client``,
         a client that sends the id; leaving the block ends the session. Use it
-        for each unit of work that should be locked to its own project. On a
+        for each unit of work that should stay inside its own project. On a
         server without sessions per agent conversation nothing is started and
         ``s.client`` only labels its writes with the id.
+
+        ``read`` and ``write`` (project ids) declare a picked session, and
+        ``read_everything=True`` one that reads every project and writes none,
+        as :meth:`create` takes them; without them the session is automatic.
         """
         body = clean_body(
             {
                 "agent_session": new_session_id(),
                 "label": label,
                 "client_name": self._credential_client(client_name),
+                "read_project_ids": read,
+                "write_project_ids": write,
+                "read_everything": read_everything,
             }
         )
+        if read is None and write is not None:
+            body["read_project_ids"] = builtins.list(write)
         return SessionScope(self._client, body)
+
+    @returns(ops.build_sessions_session_options)
+    def options(
+        self,
+        *,
+        read: builtins.list[str] | None = None,
+        write: builtins.list[str] | None = None,
+    ) -> Any:
+        """Which projects a picked session could read and write, given the lists so far.
+
+        ``POST /v1/sessions/options``, with your own credential (not a session
+        token): ``valid`` and every ``reasons`` entry for the lists given, the
+        ``notes`` on writes that will be held for a project's owners, and each
+        project you can read with its ``boundary``, ``can_read``/``can_write`` and
+        the ``read_reason``/``write_reason`` when it can't.
+        """
+        body = {"read_project_ids": read or [], "write_project_ids": write or []}
+        return self._run(ops.build_sessions_session_options(body=body))  # type: ignore[arg-type]
+
+    @returns(ops.build_sessions_session_status)
+    def status(self, session_id: str | None = None) -> Any:
+        """Where a session can still write, and why not elsewhere.
+
+        Its ``mode``, ``lock_state`` (and ``locked_to``), what it has read,
+        ``write.projects`` it may write (``outcome`` ``write`` or ``held``),
+        ``write.refused`` with each project's ``code`` and ``reason``, a one-line
+        ``summary`` and its last boundary ``events``. Without ``session_id``, the
+        session this client's requests run in (a scoped client's, or the one its
+        ``X-Beakr-Session`` joins; ``NotFoundError`` outside one).
+        """
+        if session_id is not None:
+            return self._run(ops.build_sessions_session_status(session_id))
+        return self._run(_current_status())
 
     @returns(ops.build_sessions_current_session)
     def current(self) -> Any:
         """The session this client's requests run in.
 
-        A scoped client's session, or the one its ``X-Beakr-Session`` joins: with
-        auto-lock, ``lock_state`` (``open``, ``locked``, ``read_only``),
+        A scoped client's session, or the one its ``X-Beakr-Session`` joins: its
+        ``mode``, ``summary``, ``lock_state`` (``open``, ``locked``, ``read_only``),
         ``write_project`` and ``touched_projects`` say what it may still write.
         """
         return self._run(ops.build_sessions_current_session())
@@ -385,12 +472,19 @@ class Sessions(Resource[M]):
         write: builtins.list[str] | None = None,
         label: str | None = None,
         remember_folder: bool | None = None,
+        read_everything: bool | None = None,
+        mode: str | None = None,
     ) -> Any:
         """Set the session's projects (each list replaces the current one).
 
-        From your own client this chooses or changes them. From the session's
-        scoped client it may only drop projects; naming one the session does
-        not have raises :class:`~beakr_sdk.errors.SessionWidenRefusedError`.
+        From your own client this chooses or changes them; ``read_everything=True``
+        makes it read every project and write none, and ``mode="automatic"`` makes
+        the server track what it touches instead (not where the organization's
+        session mode is ``must_pick``). From the session's scoped
+        client it may only drop projects; naming one the session does not have
+        raises :class:`~beakr_sdk.errors.SessionWidenRefusedError`. An automatic or
+        read_everything session that has touched a project can't be changed
+        (:class:`~beakr_sdk.errors.SessionAlreadyStartedError`).
         """
         body = clean_body(
             {
@@ -398,6 +492,8 @@ class Sessions(Resource[M]):
                 "write_project_ids": write,
                 "label": label,
                 "remember_folder": remember_folder,
+                "read_everything": read_everything,
+                "mode": mode,
             }
         )
         return self._run(ops.build_sessions_update_session(session_id, body=body))  # type: ignore[arg-type]
