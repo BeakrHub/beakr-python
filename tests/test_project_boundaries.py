@@ -92,7 +92,9 @@ def test_update_read_everything(client):
             return_value=httpx.Response(200, json=_session(mode="read_everything"))
         )
         client.sessions.update("s1", read_everything=True)
-    assert _body(patched) == {"read_everything": True}
+        assert _body(patched) == {"read_everything": True}
+        client.sessions.update("s1", mode="automatic")
+    assert _body(patched) == {"mode": "automatic"}
 
 
 def test_a_choice_that_breaks_a_boundary_is_typed_with_every_reason(client):

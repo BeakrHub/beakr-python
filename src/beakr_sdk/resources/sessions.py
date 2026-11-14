@@ -473,11 +473,14 @@ class Sessions(Resource[M]):
         label: str | None = None,
         remember_folder: bool | None = None,
         read_everything: bool | None = None,
+        mode: str | None = None,
     ) -> Any:
         """Set the session's projects (each list replaces the current one).
 
         From your own client this chooses or changes them; ``read_everything=True``
-        makes it read every project and write none. From the session's scoped
+        makes it read every project and write none, and ``mode="automatic"`` makes
+        the server track what it touches instead (not where the organization's
+        session mode is ``must_pick``). From the session's scoped
         client it may only drop projects; naming one the session does not have
         raises :class:`~beakr_sdk.errors.SessionWidenRefusedError`. An automatic or
         read_everything session that has touched a project can't be changed
@@ -490,6 +493,7 @@ class Sessions(Resource[M]):
                 "label": label,
                 "remember_folder": remember_folder,
                 "read_everything": read_everything,
+                "mode": mode,
             }
         )
         return self._run(ops.build_sessions_update_session(session_id, body=body))  # type: ignore[arg-type]
