@@ -33,8 +33,21 @@ wherever the source came from::
 
 ``retrieval`` is the call that re-reads a connected item. For a meeting note, an
 email or a Slack thread it is the provider's read tool and that item's own id:
-pass both to ``integrations.call_tool(tool, arguments)``. For a connector file it
-carries a download ``handle`` and nothing else.
+pass both to ``integrations.call(tool, arguments)`` (or ``call_tool``). For a
+connector file it carries a download ``handle`` and nothing else.
+:func:`read_call` gives the tool and arguments, or ``None`` for a file. To
+re-read every source a Knowledge read cites::
+
+    from beakr_sdk.sources import public_source, read_call
+
+    reply = beakr.knowledge.command("sources", page="Acme")
+    for record in (public_source(s) for s in reply["sources"]):
+        call = read_call(record)
+        if call is not None:  # a connected item: read it from the provider
+            tool, arguments = call
+            print(beakr.integrations.call(tool, arguments)["content"])
+        elif record.get("location", {}).get("file_id"):  # a file: read its text
+            print(beakr.files.read(record["source_ref"])["text"])
 
 ``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
 ``user_note`` citation, by name only: never the person's ``user_id``, which the
@@ -49,7 +62,7 @@ from __future__ import annotations
 from pathlib import PurePosixPath
 from typing import Any
 
-__all__ = ["UPLOAD_PROVIDER", "download_hint", "public_source", "source_where"]
+__all__ = ["UPLOAD_PROVIDER", "download_hint", "public_source", "read_call", "source_where"]
 
 #: ``provider`` of a source uploaded to Beakr rather than synced from a connector.
 UPLOAD_PROVIDER = "upload"
@@ -205,6 +218,24 @@ def _public_retrieval(retrieval: dict[str, Any]) -> dict[str, Any] | None:
             return None
         clean[name] = value
     return {"tool": tool, "arguments": clean}
+
+
+def read_call(record: dict[str, Any]) -> tuple[str, dict[str, Any]] | None:
+    """``(tool, arguments)`` that re-read a public record's connected item, or ``None``.
+
+    For :meth:`beakr_sdk.resources.integrations.Integrations.call`. ``None`` for a
+    record with no ``retrieval`` and for a connector file's download ``handle``,
+    which is fetched with ``files.download_link`` rather than a provider tool.
+    """
+    retrieval = record.get("retrieval") if isinstance(record, dict) else None
+    if not isinstance(retrieval, dict):
+        return None
+    tool, arguments = retrieval.get("tool"), retrieval.get("arguments")
+    if not isinstance(tool, str) or not tool or not isinstance(arguments, dict) or not arguments:
+        return None
+    if "handle" in arguments:
+        return None
+    return tool, dict(arguments)
 
 
 def _object(source: dict[str, Any], key: str) -> dict[str, Any]:
