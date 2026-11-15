@@ -150,7 +150,8 @@ class Proposals(Resource[M]):
         true when any came from another project, and ``recorded`` false when
         the write had no session or the trail was off. Readable by the person
         whose session wrote it, owners or admins of its project and organization
-        admins (403 ``read_trail_forbidden`` for anyone else).
+        admins (403 ``read_trail_forbidden`` for anyone else), and only outside a
+        session (403 ``session_route_unavailable`` inside one).
         """
         return self._run(ops.build_knowledge_proposal_trail(proposal_id))
 

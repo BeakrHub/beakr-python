@@ -277,6 +277,28 @@ class SessionProjectRequiredError(_ProjectIsolationError):
     """
 
 
+class SessionRouteUnavailableError(_ProjectIsolationError):
+    """403 ``session_route_unavailable``: this route is not served inside a session.
+
+    A write's read trail (a proposal's, an ingestion event's, a revision's) and a
+    few web-app views answer only a person's own credential, outside any session
+    (they answered a session ``read_trail_forbidden`` before). Ask with a client
+    that sends no session (``session=False``), as the person. ``session_id`` names
+    the session that asked.
+    """
+
+    @property
+    def session_id(self) -> str | None:
+        # In ``detail`` (and beside the envelope's code), as other session refusals.
+        holders: list[Any] = [self.details]
+        if isinstance(self.body, dict):
+            holders += [self.body.get("error"), self.body.get("detail")]
+        for holder in holders:
+            if isinstance(holder, dict) and holder.get("session_id"):
+                return str(holder["session_id"])
+        return None
+
+
 class _SessionScopeError(PermissionDeniedError):
     """A refusal about a session's projects; ``picker_url`` is where the person changes them."""
 
@@ -322,6 +344,7 @@ _FORBIDDEN_TYPES: dict[str, type[PermissionDeniedError]] = {
     "cross_project_owner_required": CrossProjectOwnerRequiredError,
     "session_project_required": SessionProjectRequiredError,
     "project_content_locked": ProjectContentLockedError,
+    "session_route_unavailable": SessionRouteUnavailableError,
 }
 
 
