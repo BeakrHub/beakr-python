@@ -226,8 +226,9 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   project boundary refusals below), `NotFoundError` (and its
   subclass `NotProvidedError`, below), `ConflictError` (and its subclasses
   `ProjectProfileRequiredError` for `project_profile_required`,
-  `SessionEndedError` for `session_ended` and `SessionAlreadyStartedError` for
-  `session_already_started`), `ValidationError` (and its subclasses
+  `SessionEndedError` for `session_ended`, `SessionAlreadyStartedError` for
+  `session_already_started` and `SessionLockConfirmError` for
+  `session_lock_confirm`), `ValidationError` (and its subclasses
   `SessionSelectionInvalidError`, `BoundaryBelowMinimumError` and
   `SettingRetiredError`), `RateLimitError`, `ServerError`, `APIConnectionError`,
   `KnowledgeCommandError` for a knowledge command the door refused, and
@@ -306,6 +307,12 @@ write, and why not elsewhere.
   document search, an upload or folder without a project) raises
   `SessionProjectRequiredError` (`session_id`): pass one of the session's
   projects and repeat the call for each project you need.
+- In an automatic session that already worked in another project, the first
+  call that touches a locked project raises `SessionLockConfirmError` (`project`,
+  `cost`, `confirm_lock`): nothing was read or written, because entering would
+  limit the session's writes. To go in, repeat it inside
+  `with beakr.confirming_lock(error.confirm_lock):`; or ask the user, or start a
+  new session.
 - A session id is used once. After its session ends (`beakr.sessions.end()`),
   the client's requests raise `SessionEndedError`; make a new client.
 - Where agents must write inside a session (`agent_writes_require_session`), a

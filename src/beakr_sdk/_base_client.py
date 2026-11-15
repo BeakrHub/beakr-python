@@ -8,10 +8,12 @@ refresh). The sync and async clients only add the send/sleep loop.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import random
 import uuid
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Iterator, Mapping
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -31,6 +33,7 @@ from beakr_sdk.credentials import (
     resolve_org_id,
 )
 from beakr_sdk.errors import (
+    CONFIRM_LOCK_HEADER,
     APIConnectionError,
     AuthenticationError,
     BeakrError,
@@ -158,6 +161,11 @@ class BaseClient:
         #: Injectable so tests can pin the clock an HTTP-date ``Retry-After`` is
         #: measured against.
         self._now: Callable[[], datetime] = _utc_now
+        #: The locked projects this client's calls confirm entering, inside
+        #: :meth:`confirming_lock` (per context, so concurrent calls do not share it).
+        self._confirm_lock: ContextVar[tuple[str, ...]] = ContextVar(
+            f"beakr_confirm_lock_{id(self)}", default=()
+        )
 
     def __repr__(self) -> str:
         # Never resolves the credential (that reads the keychain); shows the one
@@ -322,6 +330,22 @@ class BaseClient:
         if credential.source == "cli_tokens":
             self._token_store.save(refreshed)
 
+    @contextlib.contextmanager
+    def confirming_lock(self, *project_ids: str) -> Iterator[None]:
+        """Calls inside the block confirm entering these locked projects.
+
+        A :class:`~beakr_sdk.errors.SessionLockConfirmError` held a call because
+        entering a locked project would cost the session; repeat it here with the
+        error's ``confirm_lock`` to go in. The requests carry
+        ``X-Beakr-Confirm-Lock`` (:data:`~beakr_sdk.errors.CONFIRM_LOCK_HEADER`).
+        """
+        ids = tuple(dict.fromkeys(str(p).strip() for p in project_ids if str(p).strip()))
+        token = self._confirm_lock.set(tuple(dict.fromkeys((*self._confirm_lock.get(), *ids))))
+        try:
+            yield
+        finally:
+            self._confirm_lock.reset(token)
+
     # -- request building --------------------------------------------------
 
     def _headers_for(self, call: Call, idempotency_key: str | None) -> dict[str, str]:
@@ -341,6 +365,8 @@ class BaseClient:
             headers["X-Beakr-Session"] = self.session
         if self.org_id:
             headers["X-Org-Id"] = self.org_id
+        if confirmed := self._confirm_lock.get():
+            headers[CONFIRM_LOCK_HEADER] = ",".join(confirmed)
         if call.authenticated:
             headers.update(self.credential.auth_headers())
         if idempotency_key:
