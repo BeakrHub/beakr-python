@@ -197,8 +197,9 @@ same way. Keys never mint keys; a backend mints short-lived end-user tokens.
   (refreshed and re-saved automatically), the CLI's saved key, then the service
   account file.
 - **Base URL**: explicit `base_url`, `BEAKR_BASE_URL` (`BEAKR_API_URL` also
-  works, read after it), the CLI config, then
-  `https://api.thebeakr.com`.
+  works, read after it), then the CLI config. There is no default: with none
+  set, the client raises `AuthenticationError` (`code` `base_url_required`)
+  and sends nothing.
 - **Headers**: `X-Beakr-Client` (`sdk-python/<version>` unless `client_name=`),
   `X-Beakr-Agent` when `agent=` is set, `X-Beakr-Run` when `run=` is set,
   `X-Beakr-Session` on every request (below), and an `Idempotency-Key` on
