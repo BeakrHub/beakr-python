@@ -17,7 +17,7 @@ from typing import Any
 from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import collect_pages
-from beakr_sdk.errors import ValidationError
+from beakr_sdk.errors import BeakrError, ValidationError
 from beakr_sdk.resources._multipart_upload import multipart_upload_flow
 
 #: Extensions the web classifies as scientific data (browsers report them as
@@ -155,6 +155,54 @@ def iter_folder_files(root: Path, *, include_hidden: bool = False) -> list[Path]
     return files
 
 
+#: Refusals of one file that say nothing about the others: a folder upload skips
+#: the file and goes on (``POST /v1/uploads`` and its ``complete``). Anything else
+#: (a credential, the project, the network, a missing Knowledge profile) stops it.
+SKIPPED_FILE_CODES = frozenset(
+    {
+        "unsupported_file_type",
+        "invalid_path",
+        "content_rejected",
+        "size_mismatch",
+        "upload_failed",
+    }
+)
+
+
+class FolderUploadResult(list):  # type: ignore[type-arg]
+    """What :meth:`Files.upload_folder` sent: a list of the uploaded files' rows.
+
+    Each row is ``{"path", "artifact", "upload", "job_id", ...}`` as before;
+    ``skipped`` lists the files that were not sent, each
+    ``{"path", "name", "code", "message"}``: one the server refused for itself
+    (``unsupported_file_type`` and the other :data:`SKIPPED_FILE_CODES`) or an
+    empty file. ``total`` counts both, and :attr:`summary` says it in one text.
+    """
+
+    def __init__(
+        self,
+        uploaded: list[dict[str, Any]] | None = None,
+        skipped: list[dict[str, Any]] | None = None,
+    ) -> None:
+        super().__init__(uploaded or [])
+        self.skipped: list[dict[str, Any]] = list(skipped or [])
+
+    @property
+    def uploaded(self) -> list[dict[str, Any]]:
+        return list(self)
+
+    @property
+    def total(self) -> int:
+        return len(self) + len(self.skipped)
+
+    @property
+    def summary(self) -> str:
+        """``Uploaded N of M files`` and a ``- Failed: <name>: <reason>`` line per skipped file."""
+        lines = [f"Uploaded {len(self)} of {self.total} files."]
+        lines += [f"- Failed: {row['name']}: {row['message']}" for row in self.skipped]
+        return "\n".join(lines)
+
+
 def upload_folder_flow(
     root: Path,
     *,
@@ -175,12 +223,27 @@ def upload_folder_flow(
     the same place are reused, so uploading two trees that share subfolder names,
     or the same tree again, fills the folders that are already there.
 
-    Returns ``[{"path", "artifact", "version"}]`` in upload order.
+    A file the server refuses for itself (:data:`SKIPPED_FILE_CODES`, such as an
+    unsupported type) and an empty file are skipped and the rest still go;
+    any other refusal raises, as before.
+
+    Returns a :class:`FolderUploadResult`: the uploaded files' rows in upload
+    order, with the skipped files in ``skipped``.
     """
     folder_ids: dict[Path, str | None] = {Path("."): folder_id}
     children: dict[str, dict[str, str]] = {}
-    results: list[dict[str, Any]] = []
+    results = FolderUploadResult()
     for file_path in iter_folder_files(root, include_hidden=include_hidden):
+        if file_path.stat().st_size == 0:
+            results.skipped.append(
+                {
+                    "path": str(file_path),
+                    "name": file_path.name,
+                    "code": "empty_file",
+                    "message": "Empty file; Beakr does not store empty files",
+                }
+            )
+            continue
         relative_dir = file_path.parent.relative_to(root)
         if root_folder:
             relative_dir = Path(root.name) / relative_dir
@@ -189,13 +252,26 @@ def upload_folder_flow(
             target_folder = yield from _ensure_folder(
                 relative_dir, folder_ids, project_id, children
             )
-        uploaded = yield from upload_flow(
-            file_path,
-            project_id=project_id,
-            folder_id=target_folder,
-            ingest=ingest,
-            relative_path=upload_relative_path(file_path, root),
-        )
+        try:
+            uploaded = yield from upload_flow(
+                file_path,
+                project_id=project_id,
+                folder_id=target_folder,
+                ingest=ingest,
+                relative_path=upload_relative_path(file_path, root),
+            )
+        except BeakrError as exc:
+            if exc.code not in SKIPPED_FILE_CODES:
+                raise
+            results.skipped.append(
+                {
+                    "path": str(file_path),
+                    "name": file_path.name,
+                    "code": exc.code,
+                    "message": exc.message,
+                }
+            )
+            continue
         results.append({"path": str(file_path), **uploaded})
     return results
 

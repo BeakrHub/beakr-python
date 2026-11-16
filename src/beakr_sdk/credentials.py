@@ -57,7 +57,18 @@ from urllib.parse import urlsplit
 from beakr_sdk._redact import dataclass_repr, mask, redact_headers
 from beakr_sdk.errors import AuthenticationError
 
-DEFAULT_BASE_URL = "https://api.thebeakr.com"
+#: The self-hosted line has no default API: every deployment has its own URL,
+#: and a key must never go to Beakr's hosted cloud because nothing was set.
+#: Empty (falsy, and an origin no URL matches); kept so code that compares with
+#: it still imports. :func:`resolve_base_url` raises when nothing is configured.
+DEFAULT_BASE_URL = ""
+
+#: Raised (as :class:`AuthenticationError`, ``code`` ``base_url_required``) when
+#: no API URL is configured: nothing is sent anywhere.
+BASE_URL_REQUIRED_MESSAGE = (
+    "Set your deployment's URL: pass base_url=... or set BEAKR_BASE_URL "
+    "(for example https://beakr.example.com)."
+)
 
 #: Refresh an access token this many seconds before it expires, so a request
 #: never leaves with a token that dies in flight.
@@ -102,16 +113,29 @@ def read_cli_config() -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
-def resolve_base_url(explicit: str | None = None) -> str:
-    """Explicit, then ``BEAKR_BASE_URL`` / ``BEAKR_API_URL``, then CLI config, then prod."""
+def configured_base_url(explicit: str | None = None) -> str | None:
+    """Explicit, then ``BEAKR_BASE_URL`` / ``BEAKR_API_URL``, then CLI config; else None."""
     url = (
         explicit
         or os.environ.get("BEAKR_BASE_URL")
         or os.environ.get("BEAKR_API_URL")
         or read_cli_config().get("api_url")
-        or DEFAULT_BASE_URL
     )
-    return str(url).rstrip("/")
+    text = str(url).strip().rstrip("/") if url else ""
+    return text or None
+
+
+def resolve_base_url(explicit: str | None = None) -> str:
+    """The configured API URL (:func:`configured_base_url`).
+
+    There is no default on the self-hosted line: with none configured this
+    raises :class:`AuthenticationError` (``code`` ``base_url_required``) before
+    anything is sent.
+    """
+    url = configured_base_url(explicit)
+    if url is None:
+        raise AuthenticationError(BASE_URL_REQUIRED_MESSAGE, code="base_url_required")
+    return url
 
 
 _DEFAULT_PORTS = {"http": 80, "https": 443}
@@ -120,8 +144,8 @@ _DEFAULT_PORTS = {"http": 80, "https": 443}
 def normalize_origin(url: str) -> str:
     """``scheme://host[:port]`` in lower case, without a default port or path.
 
-    The key a stored login is filed under. ``https://API.thebeakr.com/`` and
-    ``https://api.thebeakr.com:443`` are one origin; ``localhost`` and
+    The key a stored login is filed under. ``https://API.example.com/`` and
+    ``https://api.example.com:443`` are one origin; ``localhost`` and
     ``127.0.0.1`` are deliberately two, as they are to a browser.
     """
     parts = urlsplit(url.strip() if "://" in url else f"https://{url.strip()}")
@@ -318,7 +342,12 @@ class TokenStore:
             legacy = _tokens_from(data)
             if legacy is None:
                 return {}
-            return {normalize_origin(legacy.base_url or resolve_base_url()): legacy}
+            # A record from before logins were filed by origin: the configured
+            # API's, and no one's when none is configured (never a default's).
+            legacy_url = legacy.base_url or configured_base_url()
+            if not legacy_url:
+                return {}
+            return {normalize_origin(legacy_url): legacy}
         logins: dict[str, StoredTokens] = {}
         for origin, entry in (data.get("logins") or {}).items():
             tokens = _tokens_from(entry)
@@ -781,7 +810,7 @@ class ServiceAccountFile:
     --credentials-file`` or :func:`write_service_account_file`::
 
         {"type": "beakr_service_account", "api_key": "bk_live_...",
-         "base_url": "https://api.thebeakr.com", "org_id": "...",
+         "base_url": "https://beakr.example.com", "org_id": "...",
          "service_account_id": "...", "key_id": "...", "name": "deploy"}
 
     Only ``type`` and ``api_key`` are required. ``base_url``, when present,
@@ -987,7 +1016,9 @@ def resolve_credential(
     if tokens is not None:
         return Credential(source="cli_tokens", tokens=tokens)
     saved_key = config.get("api_key")
-    if saved_key and normalize_origin(str(config.get("api_url") or DEFAULT_BASE_URL)) == origin:
+    # A key an older CLI saved without its API's URL belongs to no known API here.
+    saved_url = config.get("api_url")
+    if saved_key and saved_url and normalize_origin(str(saved_url)) == origin:
         return Credential(source="cli_config", token=str(saved_key))
     elsewhere = sorted(store.logins())
     sa_path, named = service_account_file_path()
@@ -996,8 +1027,8 @@ def resolve_credential(
         if account.base_url is None or normalize_origin(account.base_url) == origin:
             return Credential(source="service_account", token=account.api_key)
         elsewhere.append(normalize_origin(account.base_url))
-    if saved_key:
-        elsewhere.append(normalize_origin(str(config.get("api_url") or DEFAULT_BASE_URL)))
+    if saved_key and saved_url:
+        elsewhere.append(normalize_origin(str(saved_url)))
     if elsewhere:
         raise AuthenticationError(
             f"No Beakr credentials for {origin}. The stored sign-in is for "

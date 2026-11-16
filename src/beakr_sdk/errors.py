@@ -747,6 +747,17 @@ def _answered_at(response: httpx.Response) -> str:
     return str(httpx.URL(scheme=url.scheme, host=url.host, port=url.port, path=url.path))
 
 
+def _called_origin(response: httpx.Response) -> str | None:
+    """``scheme://host[:port]`` of the request, without credentials; None when unknown."""
+    try:
+        url = response.request.url
+    except RuntimeError:  # a response built without its request
+        return None
+    if not url.host:
+        return None
+    return str(httpx.URL(scheme=url.scheme, host=url.host, port=url.port))
+
+
 def _not_json_reason(response: httpx.Response, text: str) -> tuple[str, str | None]:
     """The message, and the fix, for a body that is not JSON.
 
@@ -767,8 +778,7 @@ def _not_json_reason(response: httpx.Response, text: str) -> tuple[str, str | No
         )
     else:
         fix = (
-            "Check the API URL (base_url, or BEAKR_BASE_URL): it must be a Beakr API, "
-            "such as https://api.thebeakr.com."
+            "Check the API URL (base_url, or BEAKR_BASE_URL): it must be your deployment's API URL."
         )
     return message, fix
 
@@ -885,6 +895,11 @@ def _typed_error(response: httpx.Response, *, now: datetime | None) -> BeakrErro
     if status in (400, 422):
         return _INVALID_TYPES.get(str(code), ValidationError)(message, **common)
     if status == 401:
+        called = _called_origin(response)
+        if called and not isinstance(body, str):
+            # Which API refused the key: a key sent to the wrong deployment
+            # otherwise reads as a broken key.
+            message = f"{message} (called {called})"
         return AuthenticationError(message, **common)
     if status == 403:
         return _FORBIDDEN_TYPES.get(str(code), PermissionDeniedError)(

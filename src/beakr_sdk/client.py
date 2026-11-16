@@ -70,8 +70,10 @@ class Beakr(BaseClient):
     Args:
         api_key: A ``bk_live_`` API key or ``bk_at_`` access token. Defaults to
             the chain in :mod:`beakr_sdk.credentials`.
-        base_url: API base URL. Defaults to ``BEAKR_BASE_URL`` / ``BEAKR_API_URL``,
-            then the CLI config, then ``https://api.thebeakr.com``.
+        base_url: Your deployment's API URL. Defaults to ``BEAKR_BASE_URL`` /
+            ``BEAKR_API_URL``, then the CLI config; with none of them set the
+            client raises ``AuthenticationError`` (``base_url_required``) and
+            sends nothing. There is no hosted default.
         client_name: Sent as ``X-Beakr-Client``; defaults to ``sdk-python/<version>``.
         agent: Sent as ``X-Beakr-Agent`` to attribute writes, e.g. ``"my-bot"``.
         run: Sent as ``X-Beakr-Run``: labels this client's Knowledge writes as one

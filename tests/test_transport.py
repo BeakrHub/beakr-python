@@ -278,7 +278,8 @@ def test_legacy_detail_errors_map_to_types(client, status, error_type, code) -> 
         client.projects.get("p1")
     assert caught.value.status == status
     assert caught.value.code == code
-    assert caught.value.message == "nope"
+    # A 401 names the API that refused the credential.
+    assert caught.value.message == ("nope (called https://api.test)" if status == 401 else "nope")
     assert caught.value.request_id == "req-9"
 
 

@@ -51,7 +51,7 @@ def _store_tokens(*, access="bk_at_old", refresh="bk_rt_old", expires_in=3600) -
 
 def test_no_credentials_is_a_clear_authentication_error() -> None:
     with pytest.raises(AuthenticationError, match="beakr auth login"):
-        resolve_credential()
+        resolve_credential(base_url=BASE)
 
 
 def test_chain_order_explicit_env_dev_tokens_config(monkeypatch) -> None:
@@ -87,7 +87,9 @@ def test_a_saved_api_key_lives_in_the_store_and_is_sent_as_a_plain_key() -> None
 
 
 def test_base_url_order(monkeypatch) -> None:
-    assert resolve_base_url() == "https://api.thebeakr.com"
+    # No hosted default on the self-hosted line (tests/test_no_hosted_default.py).
+    with pytest.raises(AuthenticationError, match="Set your deployment's URL"):
+        resolve_base_url()
     _write_config({"api_url": "https://config.test/"})
     assert resolve_base_url() == "https://config.test"
     monkeypatch.setenv("BEAKR_API_URL", "https://api-url.test")

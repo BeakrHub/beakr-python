@@ -281,6 +281,15 @@ class Files(Resource[M]):
         paths; False puts the directory's contents straight into ``folder_id``.
         Folders that already exist under the same name are reused, so uploading two
         trees with shared subfolder names, or the same tree again, does not fail.
+
+        A file the server refuses for itself (an unsupported type such as ``.fcs``,
+        and the other per-file refusals in ``SKIPPED_FILE_CODES``) and an empty file
+        are skipped, and the rest are still uploaded. Returns a list of the uploaded
+        files' rows (``path``, ``artifact``, ``job_id``...) whose ``skipped``
+        attribute lists the files not sent (``path``, ``name``, ``code``,
+        ``message``); ``summary`` reads "Uploaded N of M files." with a
+        "- Failed: <name>: <reason>" line each. Any other refusal (credential,
+        project access, a missing Knowledge profile, the network) raises.
         """
         root = Path(path)
         if not root.is_dir():
