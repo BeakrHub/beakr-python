@@ -3,7 +3,8 @@ carry types to another project or up to the organization.
 
 ``knowledge.list_card_types`` / ``update_card_type`` / ``remove_card_type_copy`` /
 ``copy_card_types`` / ``promote_card_types`` over ``/v1/knowledge/wiki/page-types``,
-on both clients.
+on both clients; and ``rename_card_type_fields`` / ``retype_cards``, which change
+the cards a project already has and are dry runs unless asked to write.
 """
 
 from __future__ import annotations
@@ -149,3 +150,88 @@ async def test_async_copy_and_promote(async_client) -> None:
     copied = await async_client.knowledge.copy_card_types("p1", "p2", ["deviation"])
     promoted = await async_client.knowledge.promote_card_types("p1", ["deviation"])
     assert copied == promoted == answer
+
+
+RENAMED = {
+    "page_type": "deviation",
+    "dry_run": True,
+    "cards": 12,
+    "cards_changed": 9,
+    "cards_written": 0,
+    "cards_conflicted": 0,
+    "cards_refused": 0,
+    "cards_remaining": 0,
+    "rows_renamed": 9,
+    "rows_merged": 1,
+    "applied": {"Cause": "Root cause"},
+    "refused": {},
+    "commit_id": None,
+    "undo_event_id": None,
+}
+
+
+@respx.mock
+def test_rename_card_type_fields_is_a_dry_run_unless_asked_to_write(client) -> None:
+    # Root cause guarded: the write changes up to 500 cards a call, so the
+    # method must never send dry_run false unless the caller says so.
+    route = respx.post(f"{TYPE_URL}/rename-fields").respond(200, json=RENAMED)
+    preview = client.knowledge.rename_card_type_fields("deviation", "p1", {"Cause": "Root cause"})
+    assert preview["cards_changed"] == 9
+    assert json.loads(route.calls.last.request.content) == {
+        "project_id": "p1",
+        "renames": [{"old": "Cause", "new": "Root cause"}],
+        "dry_run": True,
+    }
+    client.knowledge.rename_card_type_fields(
+        "deviation", "p1", [{"old": "Cause", "new": "Root cause"}], dry_run=False
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "project_id": "p1",
+        "renames": [{"old": "Cause", "new": "Root cause"}],
+        "dry_run": False,
+    }
+
+
+@respx.mock
+def test_retype_cards_is_a_dry_run_unless_asked_to_write(client) -> None:
+    answer = {
+        "from_type": "deviation",
+        "to_type": "incident",
+        "dry_run": True,
+        "cards": 12,
+        "cards_retyped": 0,
+        "cards_skipped": 0,
+        "cards_remaining": 0,
+        "commit_id": None,
+        "undo_event_id": None,
+    }
+    route = respx.post(f"{TYPE_URL}/retype-cards").respond(200, json=answer)
+    assert client.knowledge.retype_cards("deviation", "p1", "incident")["cards"] == 12
+    assert json.loads(route.calls.last.request.content) == {
+        "project_id": "p1",
+        "to_type": "incident",
+        "dry_run": True,
+    }
+    client.knowledge.retype_cards("deviation", "p1", "incident", dry_run=False)
+    assert json.loads(route.calls.last.request.content)["dry_run"] is False
+
+
+@respx.mock
+def test_a_change_during_knowledge_maintenance_raises_conflict(client) -> None:
+    respx.post(f"{TYPE_URL}/retype-cards").respond(
+        409, json={"error": {"code": "conflict", "message": "Knowledge is running maintenance."}}
+    )
+    with pytest.raises(ConflictError):
+        client.knowledge.retype_cards("deviation", "p1", "incident", dry_run=False)
+
+
+@respx.mock
+async def test_async_rename_and_retype(async_client) -> None:
+    respx.post(f"{TYPE_URL}/rename-fields").respond(200, json=RENAMED)
+    retype = respx.post(f"{TYPE_URL}/retype-cards").respond(200, json={"cards": 3})
+    renamed = await async_client.knowledge.rename_card_type_fields(
+        "deviation", "p1", {"Cause": "Root cause"}
+    )
+    assert renamed["applied"] == {"Cause": "Root cause"}
+    await async_client.knowledge.retype_cards("deviation", "p1", "incident")
+    assert json.loads(retype.calls.last.request.content)["dry_run"] is True

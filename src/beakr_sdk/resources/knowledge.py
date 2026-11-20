@@ -750,3 +750,52 @@ class Knowledge(Resource[M]):
         """
         body = {"source": project_id, "keys": list(keys), "replace": replace}
         return self._run(ops.build_knowledge_promote_wiki_page_types(body=body))
+
+    # -- the cards a project already has ----------------------------------------
+
+    @returns(ops.build_knowledge_rename_wiki_page_type_fields)
+    def rename_card_type_fields(
+        self,
+        key: str,
+        project_id: str,
+        renames: Mapping[str, str] | list[dict[str, str]],
+        *,
+        dry_run: bool = True,
+    ) -> Any:
+        """Rename fields on every card of a type in one project. A dry run unless asked.
+
+        ``renames`` is ``{old: new}`` or the route's own list of ``{"old", "new"}``;
+        the type's field list is renamed with the cards, and rows that become the
+        same field are merged with their citations kept. With ``dry_run`` (the
+        default) nothing is written and the answer holds the counts: ``cards``,
+        ``cards_changed``, ``rows_renamed``, ``rows_merged`` and the renames it
+        would have ``applied`` and ``refused``. ``dry_run=False`` changes at most
+        500 cards a call; ``cards_remaining`` says how many are left, and the same
+        call again changes the next ones. An applied change answers ``commit_id``
+        and ``undo_event_id`` and shows in the project's activity, where an owner
+        can undo it. Only the project's owners may; ``ConflictError`` while
+        Knowledge runs maintenance on the project.
+        """
+        pairs = (
+            [{"old": old, "new": new} for old, new in renames.items()]
+            if isinstance(renames, Mapping)
+            else [dict(pair) for pair in renames]
+        )
+        body = {"project_id": project_id, "renames": pairs, "dry_run": dry_run}
+        return self._run(ops.build_knowledge_rename_wiki_page_type_fields(key, body=body))
+
+    @returns(ops.build_knowledge_retype_wiki_page_type_cards)
+    def retype_cards(self, key: str, project_id: str, to_type: str, *, dry_run: bool = True) -> Any:
+        """Move every card of a type in one project to another type. A dry run unless asked.
+
+        ``to_type`` must be an active type in the project whose instances are
+        cards. With ``dry_run`` (the default) nothing is written and the answer
+        holds ``cards``, the number that would move. ``dry_run=False`` moves at
+        most 500 cards a call (``cards_retyped``, ``cards_skipped``,
+        ``cards_remaining``) and answers ``commit_id`` and ``undo_event_id``. A
+        card's text is not changed: if the two types name a field differently,
+        rename the fields on the target type afterwards
+        (:meth:`rename_card_type_fields`). Only the project's owners may.
+        """
+        body = {"project_id": project_id, "to_type": to_type, "dry_run": dry_run}
+        return self._run(ops.build_knowledge_retype_wiki_page_type_cards(key, body=body))

@@ -124,6 +124,22 @@ one project defines into another project, and `promote_card_types(project_id,
 keys)` copies them up to the organization (an organization admin);
 both skip a type the destination already defines unless `replace=True`.
 
+A change to a type does not rewrite the cards a project already has. Two calls
+do, and both are dry runs that write nothing until you pass `dry_run=False`:
+
+```python
+preview = beakr.knowledge.rename_card_type_fields("deviation", project_id, {"Cause": "Root cause"})
+print(preview["cards_changed"], preview["applied"], preview["refused"])
+beakr.knowledge.rename_card_type_fields(
+    "deviation", project_id, {"Cause": "Root cause"}, dry_run=False
+)
+beakr.knowledge.retype_cards("deviation", project_id, "incident")  # dry run: counts only
+```
+
+One call changes at most 500 cards; `cards_remaining` says how many are left,
+and the same call again changes the next ones. An applied change shows in the
+project's activity, where an owner of the project can undo it.
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers
