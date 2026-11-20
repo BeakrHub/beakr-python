@@ -158,6 +158,22 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "POST /v1/knowledge/wiki/page-types/{}/retype-cards",
         lambda c: c.knowledge.retype_cards("batch", "p1", "lot"),
     ),
+    (
+        "GET /v1/knowledge/wiki/page-types/history",
+        lambda c: c.knowledge.card_type_history(project_id="p1"),
+    ),
+    (
+        "PUT /v1/knowledge/wiki/page-types/settings",
+        lambda c: c.knowledge.set_card_type_settings("p1", inherit="builtin"),
+    ),
+    (
+        "GET /v1/knowledge/wiki/page-types/suggestions",
+        lambda c: c.knowledge.card_type_suggestions("p1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/suggestions/{}/dismiss",
+        lambda c: c.knowledge.dismiss_card_type_suggestion("sg1", "p1"),
+    ),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
     ("GET /v1/knowledge/wiki/pages/by-title", lambda c: c.knowledge.pages.by_title("BK-7")),
     ("GET /v1/knowledge/wiki/pages/{}", lambda c: c.knowledge.pages.get("pg1")),
