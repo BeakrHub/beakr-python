@@ -94,6 +94,52 @@ print(beakr.projects.knowledge_profile(project_id)["entity_types"])
 `knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
 while the project has none.
 
+### Change a project's card types
+
+Card types are the kinds of cards Knowledge writes for a project. A change is
+held by one scope: `project` (the default) changes the type for one project
+only, giving it its own copy when it inherited the type; `org` changes it for
+every project in the organization without its own copy. A project's owners
+change its types and an organization's admins the organization's.
+
+```python
+types = beakr.knowledge.list_card_types(project_id=project_id)["page_types"]
+saved = beakr.knowledge.update_card_type(
+    "deviation",
+    project_id=project_id,
+    description="One departure from a batch record",
+    fields=[{"name": "Root cause", "required": True}, {"name": "CAPA"}],
+)
+print(saved["page_type"].get("overrides"))  # the scope this copy stands in front of
+beakr.knowledge.remove_card_type_copy("deviation", project_id=project_id)
+```
+
+`fields` replaces the type's field list. Cards already written are not
+rewritten; later compiles use the new definition. `remove_card_type_copy`
+raises `ConflictError` for a type defined only in that scope: turn it off with
+`update_card_type(key, status="deprecated")` instead.
+
+`copy_card_types(from_project_id, to_project_id, keys)` copies the types
+one project defines into another project, and `promote_card_types(project_id,
+keys)` copies them up to the organization (an organization admin);
+both skip a type the destination already defines unless `replace=True`.
+
+A change to a type does not rewrite the cards a project already has. Two calls
+do, and both are dry runs that write nothing until you pass `dry_run=False`:
+
+```python
+preview = beakr.knowledge.rename_card_type_fields("deviation", project_id, {"Cause": "Root cause"})
+print(preview["cards_changed"], preview["applied"], preview["refused"])
+beakr.knowledge.rename_card_type_fields(
+    "deviation", project_id, {"Cause": "Root cause"}, dry_run=False
+)
+beakr.knowledge.retype_cards("deviation", project_id, "incident")  # dry run: counts only
+```
+
+One call changes at most 500 cards; `cards_remaining` says how many are left,
+and the same call again changes the next ones. An applied change shows in the
+project's activity, where an owner of the project can undo it.
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers

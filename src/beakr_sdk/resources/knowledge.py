@@ -620,3 +620,182 @@ class Knowledge(Resource[M]):
         )
 
     # -- Knowledge as resources (data, not the door's prose) ------------------
+
+    # -- card types ------------------------------------------------------------
+
+    @returns(ops.build_knowledge_list_wiki_page_types)
+    def list_card_types(
+        self,
+        *,
+        project_id: str | None = None,
+        include_proposed: bool | None = None,
+        include_deprecated: bool | None = None,
+    ) -> Any:
+        """The card types a project uses: ``{page_types, map_mode}``.
+
+        Each type is as the narrowest scope that defines it holds it: ``scope`` is
+        ``project``, ``org`` or ``global``, and ``metadata_schema`` holds its
+        fields (``key_attributes``), which are required (``required_attributes``)
+        and whether an instance is a card or a row (``grain``). ``project_id`` is
+        the project's id. Types turned off or only proposed are left out unless
+        ``include_deprecated`` / ``include_proposed`` ask for them.
+        """
+        return self._run(
+            ops.build_knowledge_list_wiki_page_types(
+                project_id=project_id,
+                include_proposed=include_proposed,
+                include_deprecated=include_deprecated,
+            )
+        )
+
+    @returns(ops.build_knowledge_update_wiki_page_type)
+    def update_card_type(
+        self,
+        key: str,
+        *,
+        scope: str = "project",
+        project_id: str | None = None,
+        label: str | None = None,
+        description: str | None = None,
+        when_to_use: str | None = None,
+        when_not_to_use: str | None = None,
+        aliases: list[str] | None = None,
+        fields: list[dict[str, Any]] | None = None,
+        grain: str | None = None,
+        status: str | None = None,
+    ) -> Any:
+        """Change a card type as one scope holds it. Returns ``{page_type}``.
+
+        ``scope`` is ``project`` (one project, named by ``project_id``), ``org``
+        (every project in the organization without its own copy) or ``global``;
+        only scope ``project`` takes ``project_id``. A field left out is kept; a
+        list given replaces that list. ``fields`` is the type's fields in order,
+        each ``{"name", "required"}``; ``grain`` is ``card`` or ``row``;
+        ``status`` ``deprecated`` turns the type off for the scope.
+
+        Changing a type the scope only inherits gives the scope its own copy, and
+        ``page_type["overrides"]`` names the scope that copy stands in front of
+        (:meth:`remove_card_type_copy` drops it). A project's owners change its
+        types and an organization's admins the organization's. Cards already
+        written are not rewritten; later compiles use the new definition.
+        """
+        body = clean_body(
+            {
+                "scope": scope,
+                "project_id": project_id,
+                "label": label,
+                "description": description,
+                "when_to_use": when_to_use,
+                "when_not_to_use": when_not_to_use,
+                "aliases": aliases,
+                "fields": fields,
+                "grain": grain,
+                "status": status,
+            }
+        )
+        return self._run(ops.build_knowledge_update_wiki_page_type(key, body=body))
+
+    @returns(ops.build_knowledge_remove_wiki_page_type_override)
+    def remove_card_type_copy(
+        self, key: str, *, scope: str = "project", project_id: str | None = None
+    ) -> Any:
+        """Remove a scope's own copy of a card type. Returns ``{removed, key, scope}``.
+
+        ``scope`` is ``project`` (with ``project_id``) or ``org``; the scope goes
+        back to the type it inherits. A type defined only in that scope raises
+        ``ConflictError``: turn it off with ``update_card_type(key,
+        status="deprecated")`` instead.
+        """
+        return self._run(
+            ops.build_knowledge_remove_wiki_page_type_override(
+                key, scope=scope, project_id=project_id
+            )
+        )
+
+    @returns(ops.build_knowledge_copy_wiki_page_types)
+    def copy_card_types(
+        self,
+        from_project_id: str,
+        to_project_id: str,
+        keys: list[str],
+        *,
+        replace: bool = False,
+    ) -> Any:
+        """Copy card types one project defines into another project.
+
+        Returns ``{copied, replaced, skipped}``. The destination gets its own
+        copies; the caller must see the source project and own the destination.
+        A key the source does not itself define is skipped as ``not_found``, and
+        one the destination already defines as ``exists`` unless ``replace`` is
+        true. Cards are not copied or changed.
+        """
+        body = {
+            "from_project_id": from_project_id,
+            "to_project_id": to_project_id,
+            "keys": list(keys),
+            "replace": replace,
+        }
+        return self._run(ops.build_knowledge_copy_wiki_page_types(body=body))
+
+    @returns(ops.build_knowledge_promote_wiki_page_types)
+    def promote_card_types(self, project_id: str, keys: list[str], *, replace: bool = False) -> Any:
+        """Copy card types a project defines up to the organization.
+
+        Returns ``{copied, replaced, skipped}``. ``project_id`` is the project
+        whose types to promote (the route names it ``source``); every project
+        without a copy of its own then inherits them. Needs an organization
+        admin. A key the project does not itself define is skipped as
+        ``not_found``, and one the organization already defines as ``exists``
+        unless ``replace`` is true.
+        """
+        body = {"source": project_id, "keys": list(keys), "replace": replace}
+        return self._run(ops.build_knowledge_promote_wiki_page_types(body=body))
+
+    # -- the cards a project already has ----------------------------------------
+
+    @returns(ops.build_knowledge_rename_wiki_page_type_fields)
+    def rename_card_type_fields(
+        self,
+        key: str,
+        project_id: str,
+        renames: Mapping[str, str] | list[dict[str, str]],
+        *,
+        dry_run: bool = True,
+    ) -> Any:
+        """Rename fields on every card of a type in one project. A dry run unless asked.
+
+        ``renames`` is ``{old: new}`` or the route's own list of ``{"old", "new"}``;
+        the type's field list is renamed with the cards, and rows that become the
+        same field are merged with their citations kept. With ``dry_run`` (the
+        default) nothing is written and the answer holds the counts: ``cards``,
+        ``cards_changed``, ``rows_renamed``, ``rows_merged`` and the renames it
+        would have ``applied`` and ``refused``. ``dry_run=False`` changes at most
+        500 cards a call; ``cards_remaining`` says how many are left, and the same
+        call again changes the next ones. An applied change answers ``commit_id``
+        and ``undo_event_id`` and shows in the project's activity, where an owner
+        can undo it. Only the project's owners may; ``ConflictError`` while
+        Knowledge runs maintenance on the project.
+        """
+        pairs = (
+            [{"old": old, "new": new} for old, new in renames.items()]
+            if isinstance(renames, Mapping)
+            else [dict(pair) for pair in renames]
+        )
+        body = {"project_id": project_id, "renames": pairs, "dry_run": dry_run}
+        return self._run(ops.build_knowledge_rename_wiki_page_type_fields(key, body=body))
+
+    @returns(ops.build_knowledge_retype_wiki_page_type_cards)
+    def retype_cards(self, key: str, project_id: str, to_type: str, *, dry_run: bool = True) -> Any:
+        """Move every card of a type in one project to another type. A dry run unless asked.
+
+        ``to_type`` must be an active type in the project whose instances are
+        cards. With ``dry_run`` (the default) nothing is written and the answer
+        holds ``cards``, the number that would move. ``dry_run=False`` moves at
+        most 500 cards a call (``cards_retyped``, ``cards_skipped``,
+        ``cards_remaining``) and answers ``commit_id`` and ``undo_event_id``. A
+        card's text is not changed: if the two types name a field differently,
+        rename the fields on the target type afterwards
+        (:meth:`rename_card_type_fields`). Only the project's owners may.
+        """
+        body = {"project_id": project_id, "to_type": to_type, "dry_run": dry_run}
+        return self._run(ops.build_knowledge_retype_wiki_page_type_cards(key, body=body))
