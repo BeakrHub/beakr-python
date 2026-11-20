@@ -109,29 +109,30 @@ async def test_async_card_type_round_trip(async_client) -> None:
 
 
 @respx.mock
-def test_copy_card_types_names_both_projects_and_leaves_replace_to_the_server(client) -> None:
+def test_copy_card_types_names_both_projects(client) -> None:
     copied = {"copied": [PAGE_TYPE], "replaced": [], "skipped": []}
     route = respx.post(f"{LIST_URL}/copy").respond(200, json=copied)
-    assert (
-        client.knowledge.copy_card_types(["deviation"], from_project_id="p1", to_project_id="p2")
-        == copied
-    )
+    assert client.knowledge.copy_card_types("p1", "p2", ["deviation"]) == copied
     assert json.loads(route.calls.last.request.content) == {
         "from_project_id": "p1",
         "to_project_id": "p2",
         "keys": ["deviation"],
+        "replace": False,
     }
 
 
 @respx.mock
-def test_promote_card_types_names_the_source_not_a_project_id(client) -> None:
+def test_promote_card_types_sends_the_project_as_source(client) -> None:
+    # The route names the project `source`, not `project_id`: a request that
+    # names a project is judged as a write to that project, and a promotion
+    # changes what every project inherits.
     answer = {
         "copied": [],
         "replaced": [{**PAGE_TYPE, "scope": "org"}],
         "skipped": [{"key": "capa", "reason": "not_found"}],
     }
     route = respx.post(f"{LIST_URL}/promote").respond(200, json=answer)
-    promoted = client.knowledge.promote_card_types(["deviation", "capa"], source="p1", replace=True)
+    promoted = client.knowledge.promote_card_types("p1", ["deviation", "capa"], replace=True)
     assert promoted["skipped"] == [{"key": "capa", "reason": "not_found"}]
     assert json.loads(route.calls.last.request.content) == {
         "source": "p1",
@@ -145,8 +146,6 @@ async def test_async_copy_and_promote(async_client) -> None:
     answer = {"copied": [PAGE_TYPE], "replaced": [], "skipped": []}
     respx.post(f"{LIST_URL}/copy").respond(200, json=answer)
     respx.post(f"{LIST_URL}/promote").respond(200, json=answer)
-    copied = await async_client.knowledge.copy_card_types(
-        ["deviation"], from_project_id="p1", to_project_id="p2"
-    )
-    promoted = await async_client.knowledge.promote_card_types(["deviation"], source="p1")
+    copied = await async_client.knowledge.copy_card_types("p1", "p2", ["deviation"])
+    promoted = await async_client.knowledge.promote_card_types("p1", ["deviation"])
     assert copied == promoted == answer

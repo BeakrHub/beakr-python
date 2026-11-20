@@ -144,11 +144,11 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ),
     (
         "POST /v1/knowledge/wiki/page-types/copy",
-        lambda c: c.knowledge.copy_card_types(["batch"], from_project_id="p1", to_project_id="p2"),
+        lambda c: c.knowledge.copy_card_types("p1", "p2", ["batch"]),
     ),
     (
         "POST /v1/knowledge/wiki/page-types/promote",
-        lambda c: c.knowledge.promote_card_types(["batch"], source="p1"),
+        lambda c: c.knowledge.promote_card_types("p1", ["batch"]),
     ),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
     ("GET /v1/knowledge/wiki/pages/by-title", lambda c: c.knowledge.pages.by_title("BK-7")),

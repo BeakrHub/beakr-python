@@ -88,9 +88,9 @@ Each release lists the public API changes it supports, taken from the API change
   type as one scope holds it and returns `{page_type}`; and
   `knowledge.remove_card_type_copy(key, scope="project", project_id=...)`
   removes that scope's own copy, so it inherits the type again.
-- `knowledge.copy_card_types(keys, from_project_id=..., to_project_id=...)`
+- `knowledge.copy_card_types(from_project_id, to_project_id, keys)`
   copies the card types one project defines into another, and
-  `knowledge.promote_card_types(keys, source=...)` copies them up to the
+  `knowledge.promote_card_types(project_id, keys)` copies them up to the
   organization; both take `replace=True` to overwrite a type the destination
   already defines and return `{copied, replaced, skipped}`.
 
