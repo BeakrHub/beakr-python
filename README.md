@@ -119,6 +119,11 @@ rewritten; later compiles use the new definition. `remove_card_type_copy`
 raises `ConflictError` for a type defined only in that scope: turn it off with
 `update_card_type(key, status="deprecated")` instead.
 
+`copy_card_types(keys, from_project_id=..., to_project_id=...)` copies the types
+one project defines into another project, and `promote_card_types(keys,
+source=project_id)` copies them up to the organization (an organization admin);
+both skip a type the destination already defines unless `replace=True`.
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers

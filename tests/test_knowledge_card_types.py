@@ -1,7 +1,9 @@
-"""A project's card types: list them, change one, remove a scope's own copy.
+"""A project's card types: list them, change one, remove a scope's own copy, and
+carry types to another project or up to the organization.
 
-``knowledge.list_card_types`` / ``update_card_type`` / ``remove_card_type_copy``
-over ``/v1/knowledge/wiki/page-types``, on both clients.
+``knowledge.list_card_types`` / ``update_card_type`` / ``remove_card_type_copy`` /
+``copy_card_types`` / ``promote_card_types`` over ``/v1/knowledge/wiki/page-types``,
+on both clients.
 """
 
 from __future__ import annotations
@@ -104,3 +106,47 @@ async def test_async_card_type_round_trip(async_client) -> None:
     assert saved["page_type"]["key"] == "deviation"
     removed = await async_client.knowledge.remove_card_type_copy("deviation", project_id="p1")
     assert removed["removed"] is True
+
+
+@respx.mock
+def test_copy_card_types_names_both_projects_and_leaves_replace_to_the_server(client) -> None:
+    copied = {"copied": [PAGE_TYPE], "replaced": [], "skipped": []}
+    route = respx.post(f"{LIST_URL}/copy").respond(200, json=copied)
+    assert (
+        client.knowledge.copy_card_types(["deviation"], from_project_id="p1", to_project_id="p2")
+        == copied
+    )
+    assert json.loads(route.calls.last.request.content) == {
+        "from_project_id": "p1",
+        "to_project_id": "p2",
+        "keys": ["deviation"],
+    }
+
+
+@respx.mock
+def test_promote_card_types_names_the_source_not_a_project_id(client) -> None:
+    answer = {
+        "copied": [],
+        "replaced": [{**PAGE_TYPE, "scope": "org"}],
+        "skipped": [{"key": "capa", "reason": "not_found"}],
+    }
+    route = respx.post(f"{LIST_URL}/promote").respond(200, json=answer)
+    promoted = client.knowledge.promote_card_types(["deviation", "capa"], source="p1", replace=True)
+    assert promoted["skipped"] == [{"key": "capa", "reason": "not_found"}]
+    assert json.loads(route.calls.last.request.content) == {
+        "source": "p1",
+        "keys": ["deviation", "capa"],
+        "replace": True,
+    }
+
+
+@respx.mock
+async def test_async_copy_and_promote(async_client) -> None:
+    answer = {"copied": [PAGE_TYPE], "replaced": [], "skipped": []}
+    respx.post(f"{LIST_URL}/copy").respond(200, json=answer)
+    respx.post(f"{LIST_URL}/promote").respond(200, json=answer)
+    copied = await async_client.knowledge.copy_card_types(
+        ["deviation"], from_project_id="p1", to_project_id="p2"
+    )
+    promoted = await async_client.knowledge.promote_card_types(["deviation"], source="p1")
+    assert copied == promoted == answer

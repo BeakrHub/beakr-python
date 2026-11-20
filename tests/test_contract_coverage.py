@@ -142,6 +142,14 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "DELETE /v1/knowledge/wiki/page-types/{}",
         lambda c: c.knowledge.remove_card_type_copy("batch", project_id="p1"),
     ),
+    (
+        "POST /v1/knowledge/wiki/page-types/copy",
+        lambda c: c.knowledge.copy_card_types(["batch"], from_project_id="p1", to_project_id="p2"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/promote",
+        lambda c: c.knowledge.promote_card_types(["batch"], source="p1"),
+    ),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
     ("GET /v1/knowledge/wiki/pages/by-title", lambda c: c.knowledge.pages.by_title("BK-7")),
     ("GET /v1/knowledge/wiki/pages/{}", lambda c: c.knowledge.pages.get("pg1")),

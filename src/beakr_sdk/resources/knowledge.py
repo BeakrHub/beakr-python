@@ -711,3 +711,45 @@ class Knowledge(Resource[M]):
                 key, scope=scope, project_id=project_id
             )
         )
+
+    @returns(ops.build_knowledge_copy_wiki_page_types)
+    def copy_card_types(
+        self,
+        keys: list[str],
+        *,
+        from_project_id: str,
+        to_project_id: str,
+        replace: bool | None = None,
+    ) -> Any:
+        """Copy card types one project defines into another project.
+
+        Returns ``{copied, replaced, skipped}``. The destination gets its own
+        copies; the caller must see the source project and own the destination.
+        A key the source does not itself define is skipped as ``not_found``, and
+        one the destination already defines as ``exists`` unless ``replace`` is
+        true. Cards are not copied or changed.
+        """
+        body = clean_body(
+            {
+                "from_project_id": from_project_id,
+                "to_project_id": to_project_id,
+                "keys": list(keys),
+                "replace": replace,
+            }
+        )
+        return self._run(ops.build_knowledge_copy_wiki_page_types(body=body))
+
+    @returns(ops.build_knowledge_promote_wiki_page_types)
+    def promote_card_types(
+        self, keys: list[str], *, source: str, replace: bool | None = None
+    ) -> Any:
+        """Copy card types a project defines up to the organization.
+
+        Returns ``{copied, replaced, skipped}``. ``source`` is the id of the
+        project whose types to promote; every project without a copy of its own
+        then inherits them. Needs an organization admin. A key the project does
+        not itself define is skipped as ``not_found``, and one the organization
+        already defines as ``exists`` unless ``replace`` is true.
+        """
+        body = clean_body({"source": source, "keys": list(keys), "replace": replace})
+        return self._run(ops.build_knowledge_promote_wiki_page_types(body=body))
