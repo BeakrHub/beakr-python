@@ -620,3 +620,94 @@ class Knowledge(Resource[M]):
         )
 
     # -- Knowledge as resources (data, not the door's prose) ------------------
+
+    # -- card types ------------------------------------------------------------
+
+    @returns(ops.build_knowledge_list_wiki_page_types)
+    def list_card_types(
+        self,
+        *,
+        project_id: str | None = None,
+        include_proposed: bool | None = None,
+        include_deprecated: bool | None = None,
+    ) -> Any:
+        """The card types a project uses: ``{page_types, map_mode}``.
+
+        Each type is as the narrowest scope that defines it holds it: ``scope`` is
+        ``project``, ``org`` or ``global``, and ``metadata_schema`` holds its
+        fields (``key_attributes``), which are required (``required_attributes``)
+        and whether an instance is a card or a row (``grain``). ``project_id`` is
+        the project's id. Types turned off or only proposed are left out unless
+        ``include_deprecated`` / ``include_proposed`` ask for them.
+        """
+        return self._run(
+            ops.build_knowledge_list_wiki_page_types(
+                project_id=project_id,
+                include_proposed=include_proposed,
+                include_deprecated=include_deprecated,
+            )
+        )
+
+    @returns(ops.build_knowledge_update_wiki_page_type)
+    def update_card_type(
+        self,
+        key: str,
+        *,
+        scope: str = "project",
+        project_id: str | None = None,
+        label: str | None = None,
+        description: str | None = None,
+        when_to_use: str | None = None,
+        when_not_to_use: str | None = None,
+        aliases: list[str] | None = None,
+        fields: list[dict[str, Any]] | None = None,
+        grain: str | None = None,
+        status: str | None = None,
+    ) -> Any:
+        """Change a card type as one scope holds it. Returns ``{page_type}``.
+
+        ``scope`` is ``project`` (one project, named by ``project_id``), ``org``
+        (every project in the organization without its own copy) or ``global``;
+        only scope ``project`` takes ``project_id``. A field left out is kept; a
+        list given replaces that list. ``fields`` is the type's fields in order,
+        each ``{"name", "required"}``; ``grain`` is ``card`` or ``row``;
+        ``status`` ``deprecated`` turns the type off for the scope.
+
+        Changing a type the scope only inherits gives the scope its own copy, and
+        ``page_type["overrides"]`` names the scope that copy stands in front of
+        (:meth:`remove_card_type_copy` drops it). A project's owners change its
+        types and an organization's admins the organization's. Cards already
+        written are not rewritten; later compiles use the new definition.
+        """
+        body = clean_body(
+            {
+                "scope": scope,
+                "project_id": project_id,
+                "label": label,
+                "description": description,
+                "when_to_use": when_to_use,
+                "when_not_to_use": when_not_to_use,
+                "aliases": aliases,
+                "fields": fields,
+                "grain": grain,
+                "status": status,
+            }
+        )
+        return self._run(ops.build_knowledge_update_wiki_page_type(key, body=body))
+
+    @returns(ops.build_knowledge_remove_wiki_page_type_override)
+    def remove_card_type_copy(
+        self, key: str, *, scope: str = "project", project_id: str | None = None
+    ) -> Any:
+        """Remove a scope's own copy of a card type. Returns ``{removed, key, scope}``.
+
+        ``scope`` is ``project`` (with ``project_id``) or ``org``; the scope goes
+        back to the type it inherits. A type defined only in that scope raises
+        ``ConflictError``: turn it off with ``update_card_type(key,
+        status="deprecated")`` instead.
+        """
+        return self._run(
+            ops.build_knowledge_remove_wiki_page_type_override(
+                key, scope=scope, project_id=project_id
+            )
+        )

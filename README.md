@@ -94,6 +94,31 @@ print(beakr.projects.knowledge_profile(project_id)["entity_types"])
 `knowledge_profile` raises `NotFoundError` (`code == "knowledge_profile_not_found"`)
 while the project has none.
 
+### Change a project's card types
+
+Card types are the kinds of cards Knowledge writes for a project. A change is
+held by one scope: `project` (the default) changes the type for one project
+only, giving it its own copy when it inherited the type; `org` changes it for
+every project in the organization without its own copy. A project's owners
+change its types and an organization's admins the organization's.
+
+```python
+types = beakr.knowledge.list_card_types(project_id=project_id)["page_types"]
+saved = beakr.knowledge.update_card_type(
+    "deviation",
+    project_id=project_id,
+    description="One departure from a batch record",
+    fields=[{"name": "Root cause", "required": True}, {"name": "CAPA"}],
+)
+print(saved["page_type"].get("overrides"))  # the scope this copy stands in front of
+beakr.knowledge.remove_card_type_copy("deviation", project_id=project_id)
+```
+
+`fields` replaces the type's field list. Cards already written are not
+rewritten; later compiles use the new definition. `remove_card_type_copy`
+raises `ConflictError` for a type defined only in that scope: turn it off with
+`update_card_type(key, status="deprecated")` instead.
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers

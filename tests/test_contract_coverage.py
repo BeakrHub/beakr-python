@@ -133,6 +133,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ),
     ("POST /v1/knowledge/research", lambda c: c.knowledge.research("who owns billing?")),
     ("POST /v1/knowledge/wiki/command", lambda c: c.knowledge.command("ls", check=False)),
+    ("GET /v1/knowledge/wiki/page-types", lambda c: c.knowledge.list_card_types(project_id="p1")),
+    (
+        "PATCH /v1/knowledge/wiki/page-types/{}",
+        lambda c: c.knowledge.update_card_type("batch", project_id="p1", label="Batch"),
+    ),
+    (
+        "DELETE /v1/knowledge/wiki/page-types/{}",
+        lambda c: c.knowledge.remove_card_type_copy("batch", project_id="p1"),
+    ),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
     ("GET /v1/knowledge/wiki/pages/by-title", lambda c: c.knowledge.pages.by_title("BK-7")),
     ("GET /v1/knowledge/wiki/pages/{}", lambda c: c.knowledge.pages.get("pg1")),
