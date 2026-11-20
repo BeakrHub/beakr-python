@@ -630,21 +630,27 @@ class Knowledge(Resource[M]):
         project_id: str | None = None,
         include_proposed: bool | None = None,
         include_deprecated: bool | None = None,
+        include_counts: bool | None = None,
     ) -> Any:
-        """The card types a project uses: ``{page_types, map_mode}``.
+        """The card types a project uses: ``{page_types, map_mode, settings, kept_types}``.
 
         Each type is as the narrowest scope that defines it holds it: ``scope`` is
         ``project``, ``org`` or ``global``, and ``metadata_schema`` holds its
         fields (``key_attributes``), which are required (``required_attributes``)
         and whether an instance is a card or a row (``grain``). ``project_id`` is
         the project's id. Types turned off or only proposed are left out unless
-        ``include_deprecated`` / ``include_proposed`` ask for them.
+        ``include_deprecated`` / ``include_proposed`` ask for them. With a project,
+        ``settings`` is its card type settings (``inherit``, ``agent_may_change``)
+        and ``kept_types`` the built-in types it is offered whatever it chooses.
+        ``include_counts`` adds ``card_count`` (live cards) to each type and
+        ``unlisted_types``: types the project's cards carry that are not listed.
         """
         return self._run(
             ops.build_knowledge_list_wiki_page_types(
                 project_id=project_id,
                 include_proposed=include_proposed,
                 include_deprecated=include_deprecated,
+                include_counts=include_counts,
             )
         )
 
@@ -785,7 +791,15 @@ class Knowledge(Resource[M]):
         return self._run(ops.build_knowledge_rename_wiki_page_type_fields(key, body=body))
 
     @returns(ops.build_knowledge_retype_wiki_page_type_cards)
-    def retype_cards(self, key: str, project_id: str, to_type: str, *, dry_run: bool = True) -> Any:
+    def retype_cards(
+        self,
+        key: str,
+        project_id: str,
+        to_type: str,
+        *,
+        dry_run: bool = True,
+        suggestion_id: str | None = None,
+    ) -> Any:
         """Move every card of a type in one project to another type. A dry run unless asked.
 
         ``to_type`` must be an active type in the project whose instances are
@@ -796,6 +810,154 @@ class Knowledge(Resource[M]):
         card's text is not changed: if the two types name a field differently,
         rename the fields on the target type afterwards
         (:meth:`rename_card_type_fields`). Only the project's owners may.
+
+        ``suggestion_id`` is the pending suggestion this move answers (from
+        :meth:`card_type_suggestions`); an apply that leaves no card of the type
+        marks it applied. ``key`` may be a type no longer defined when the
+        project still has cards carrying it.
         """
-        body = {"project_id": project_id, "to_type": to_type, "dry_run": dry_run}
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "to_type": to_type,
+                "dry_run": dry_run,
+                "suggestion_id": suggestion_id,
+            }
+        )
         return self._run(ops.build_knowledge_retype_wiki_page_type_cards(key, body=body))
+
+    # -- card type settings, history and suggestions ------------------------------
+
+    def card_type_settings(self, project_id: str) -> Any:
+        """A project's card type settings: ``{inherit, agent_may_change}``.
+
+        ``inherit`` is ``organization`` (the organization's types and the built-in
+        ones), ``builtin`` (the built-in ones only) or ``own`` (only the types the
+        project defines). ``agent_may_change`` says whether Beakr itself may add or
+        change the project's types. Read from :meth:`list_card_types`, which
+        answers them beside the types.
+        """
+        return self._run_then(
+            ops.build_knowledge_list_wiki_page_types(project_id=project_id),
+            lambda listing: (listing or {}).get("settings"),
+        )
+
+    @returns(ops.build_knowledge_change_card_type_settings)
+    def set_card_type_settings(
+        self,
+        project_id: str,
+        *,
+        inherit: str | None = None,
+        agent_may_change: bool | None = None,
+        keep_types_in_use: bool = False,
+        dry_run: bool = True,
+    ) -> Any:
+        """Change where a project's card types come from, or who may change them.
+
+        A dry run unless ``dry_run=False``: it writes nothing and answers
+        ``current``, ``requested`` and ``types_dropped``, each type the project
+        would stop being offered with its ``live_cards``. Pass ``inherit``
+        (``organization``, ``builtin`` or ``own``), ``agent_may_change``, or both.
+        ``own`` needs the project to define at least one active type whose
+        instances are cards. Applying never changes or removes a card or a type:
+        a dropped type that still has cards gets a suggestion to move them
+        (:meth:`card_type_suggestions`), or with ``keep_types_in_use`` becomes one
+        of the project's own types (``types_kept``). An applied change answers
+        ``history_id`` and ``undo_event_id``. Only the project's owners may.
+        """
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "inherit": inherit,
+                "agent_may_change": agent_may_change,
+                "keep_types_in_use": keep_types_in_use,
+                "dry_run": dry_run,
+            }
+        )
+        return self._run(ops.build_knowledge_change_card_type_settings(body=body))
+
+    def card_type_history(
+        self,
+        *,
+        project_id: str | None = None,
+        scope: str | None = None,
+        key: str | None = None,
+        include_suggestions: bool | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Any:
+        """One page of the changes to card types, newest first: ``{data, next_cursor, has_more}``.
+
+        A project's (``project_id``) or the organization's (``scope="org"``),
+        narrowed to one type with ``key``. Each entry says who (``actor_type``,
+        ``actor_user_id`` or ``actor_name``), when, the ``kind`` (``edited``,
+        ``turned_off``, ``created``, ``settings_changed``, ``undone`` ...), a
+        ``title``, the fields that ``changed`` and the definition ``before`` and
+        ``after``. ``include_suggestions`` adds suggestions with their ``state``.
+        :meth:`iter_card_type_history` follows every page.
+        """
+        return self._run(
+            ops.build_knowledge_list_card_type_history(
+                project_id=project_id,
+                scope=scope,
+                key=key,
+                include_suggestions=include_suggestions,
+                limit=limit,
+                cursor=cursor,
+            )
+        )
+
+    def iter_card_type_history(
+        self,
+        *,
+        project_id: str | None = None,
+        scope: str | None = None,
+        key: str | None = None,
+        include_suggestions: bool | None = None,
+        page_size: int | None = None,
+    ) -> Any:
+        """Every entry :meth:`card_type_history` lists, following its cursor."""
+        return self._iter(
+            ops.build_knowledge_list_card_type_history(
+                project_id=project_id,
+                scope=scope,
+                key=key,
+                include_suggestions=include_suggestions,
+                limit=page_size,
+            )
+        )
+
+    def card_type_suggestions(
+        self, project_id: str, *, limit: int | None = None, cursor: str | None = None
+    ) -> Any:
+        """One page of what waits for a person in a project: ``{data, next_cursor, has_more}``.
+
+        ``kind`` is ``held_back`` (a type Beakr was not allowed to add) or
+        ``retype_suggested`` (cards to move, with ``details["from_type"]`` and
+        ``details["cards"]``). Answer a move with :meth:`retype_cards` and its
+        ``suggestion_id``, or :meth:`dismiss_card_type_suggestion`.
+        """
+        return self._run(
+            ops.build_knowledge_list_card_type_suggestions(
+                project_id=project_id, limit=limit, cursor=cursor
+            )
+        )
+
+    def iter_card_type_suggestions(self, project_id: str, *, page_size: int | None = None) -> Any:
+        """Every suggestion :meth:`card_type_suggestions` lists, following its cursor."""
+        return self._iter(
+            ops.build_knowledge_list_card_type_suggestions(project_id=project_id, limit=page_size)
+        )
+
+    @returns(ops.build_knowledge_dismiss_card_type_suggestion)
+    def dismiss_card_type_suggestion(self, suggestion_id: str, project_id: str) -> Any:
+        """Dismiss one suggestion. Returns ``{suggestion, activity_event_id}``.
+
+        ``project_id`` is the project the suggestion belongs to. Only the
+        project's owners may; ``ConflictError`` if it was already answered.
+        """
+        return self._run(
+            ops.build_knowledge_dismiss_card_type_suggestion(
+                suggestion_id, body={"project_id": project_id}
+            )
+        )

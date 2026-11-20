@@ -82,8 +82,20 @@ class Projects(Resource[M]):
         *,
         description: str | None = None,
         tags: builtins.list[str] | None = None,
+        card_types: dict[str, Any] | None = None,
     ) -> Any:
-        body = clean_body({"name": name, "description": description, "tags": tags})
+        """Create a project.
+
+        ``card_types`` chooses where its card types come from and who may change
+        them: ``{"inherit": "organization" | "builtin" | "own",
+        "agent_may_change": bool}``. ``inherit: "own"`` needs types in the same
+        request: ``copy_from_project_id`` (with optional ``copy_keys``) to copy
+        another project's own types, or ``types``, a list of ``{"key", "label",
+        "description", "fields", "grain"}``.
+        """
+        body = clean_body(
+            {"name": name, "description": description, "tags": tags, "card_types": card_types}
+        )
         return self._run(ops.build_projects_create_project(body=body))
 
     def update(
