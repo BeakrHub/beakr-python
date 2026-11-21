@@ -767,6 +767,7 @@ class Knowledge(Resource[M]):
         renames: Mapping[str, str] | list[dict[str, str]],
         *,
         dry_run: bool = True,
+        continue_event_id: str | None = None,
     ) -> Any:
         """Rename fields on every card of a type in one project. A dry run unless asked.
 
@@ -777,7 +778,9 @@ class Knowledge(Resource[M]):
         ``cards_changed``, ``rows_renamed``, ``rows_merged`` and the renames it
         would have ``applied`` and ``refused``. ``dry_run=False`` changes at most
         500 cards a call; ``cards_remaining`` says how many are left, and the same
-        call again changes the next ones. An applied change answers ``commit_id``
+        call again changes the next ones. Pass the first call's ``undo_event_id``
+        as ``continue_event_id`` on the later calls and the whole rename stays one
+        entry in the project's activity, with one undo. An applied change answers ``commit_id``
         and ``undo_event_id`` and shows in the project's activity, where an owner
         can undo it. Only the project's owners may; ``ConflictError`` while
         Knowledge runs maintenance on the project.
@@ -787,7 +790,14 @@ class Knowledge(Resource[M]):
             if isinstance(renames, Mapping)
             else [dict(pair) for pair in renames]
         )
-        body = {"project_id": project_id, "renames": pairs, "dry_run": dry_run}
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "renames": pairs,
+                "dry_run": dry_run,
+                "continue_event_id": continue_event_id,
+            }
+        )
         return self._run(ops.build_knowledge_rename_wiki_page_type_fields(key, body=body))
 
     @returns(ops.build_knowledge_retype_wiki_page_type_cards)
@@ -799,6 +809,7 @@ class Knowledge(Resource[M]):
         *,
         dry_run: bool = True,
         suggestion_id: str | None = None,
+        continue_event_id: str | None = None,
     ) -> Any:
         """Move every card of a type in one project to another type. A dry run unless asked.
 
@@ -806,7 +817,9 @@ class Knowledge(Resource[M]):
         cards. With ``dry_run`` (the default) nothing is written and the answer
         holds ``cards``, the number that would move. ``dry_run=False`` moves at
         most 500 cards a call (``cards_retyped``, ``cards_skipped``,
-        ``cards_remaining``) and answers ``commit_id`` and ``undo_event_id``. A
+        ``cards_remaining``) and answers ``commit_id`` and ``undo_event_id``. Pass
+        that ``undo_event_id`` as ``continue_event_id`` on the later calls of a
+        large move and it stays one entry in the project's activity, with one undo. A
         card's text is not changed: if the two types name a field differently,
         rename the fields on the target type afterwards
         (:meth:`rename_card_type_fields`). Only the project's owners may.
@@ -822,6 +835,7 @@ class Knowledge(Resource[M]):
                 "to_type": to_type,
                 "dry_run": dry_run,
                 "suggestion_id": suggestion_id,
+                "continue_event_id": continue_event_id,
             }
         )
         return self._run(ops.build_knowledge_retype_wiki_page_type_cards(key, body=body))
