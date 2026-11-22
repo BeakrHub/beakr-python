@@ -261,6 +261,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.projects.knowledge_failures("p1"),
     ),
     ("POST /v1/projects/{}/knowledge/retry-failed", lambda c: c.projects.retry_failed("p1")),
+    ("GET /v1/projects/{}/knowledge/compiles", lambda c: c.knowledge.compile_queue("p1")),
+    (
+        "POST /v1/projects/{}/knowledge/compiles/cancel",
+        lambda c: c.knowledge.cancel_queued_compiles("p1", attachment_id="s1"),
+    ),
+    (
+        "POST /v1/projects/{}/sources/{}/sync/cancel",
+        lambda c: c.integrations.cancel_source_sync("p1", "s1"),
+    ),
     ("GET /v1/projects/{}/knowledge-profile", lambda c: c.projects.knowledge_profile("p1")),
     (
         "PUT /v1/projects/{}/knowledge-profile",

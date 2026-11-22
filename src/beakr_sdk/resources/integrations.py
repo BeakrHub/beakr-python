@@ -55,6 +55,21 @@ class Integrations(Resource[M]):
         """Disconnect, including the connection at the provider."""
         return self._run(ops.build_integrations_disconnect_integration(connector_id))
 
+    @returns(ops.build_integrations_cancel_source_sync)
+    def cancel_source_sync(self, project_id: str, attachment_id: str) -> Any:
+        """Stop a project source's running sync, Notion follow-up syncs included.
+
+        Items already being read finish; the rest are skipped, and the next sync
+        picks them up. Compiles the sync already queued still run:
+        ``knowledge.cancel_queued_compiles(project_id, attachment_id=...)`` cancels
+        them (and stops the sync too). Answers ``{sync_job_id, status:
+        "cancelling", cancelled_by, next_sync, note}``; ``jobs.get(sync_job_id)``
+        follows it to ``cancelled``. ``ConflictError`` (``no_running_sync``) when no
+        sync is running. The person who attached the source, a project admin or an
+        organization admin may.
+        """
+        return self._run(ops.build_integrations_cancel_source_sync(project_id, attachment_id))
+
     @returns_all(ops.build_integrations_list_integration_tools)
     def tools(self, *, provider: str | None = None, connector_id: str | None = None) -> Any:
         """Every read-only tool for the integrations the caller has connected and may use.

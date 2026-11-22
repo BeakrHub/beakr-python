@@ -975,3 +975,54 @@ class Knowledge(Resource[M]):
                 suggestion_id, body={"project_id": project_id}
             )
         )
+
+    # -- the compile queue -----------------------------------------------------------
+
+    @returns(ops.build_knowledge_get_compile_queue)
+    def compile_queue(
+        self,
+        project_id: str,
+        *,
+        attachment_id: str | None = None,
+        artifact_id: str | None = None,
+    ) -> Any:
+        """How many Knowledge compiles are queued and running, and the last cancel's progress.
+
+        For the whole project, or one connected source (``attachment_id``) or one
+        uploaded file (``artifact_id``); give at most one. Answers ``{queued,
+        running, last_cancel}``; ``last_cancel`` is ``None`` or ``{cancel_id,
+        status, done, total, summary, cancelled_by, cancelled_at}``, where
+        ``status`` is ``"cancelling"`` until ``done`` reaches ``total``.
+        """
+        return self._run(
+            ops.build_knowledge_get_compile_queue(
+                project_id, attachment_id=attachment_id, artifact_id=artifact_id
+            )
+        )
+
+    @returns(ops.build_knowledge_cancel_queued_compiles)
+    def cancel_queued_compiles(
+        self,
+        project_id: str,
+        *,
+        attachment_id: str | None = None,
+        artifact_id: str | None = None,
+    ) -> Any:
+        """Cancel the queued Knowledge compiles of a project, or of one source or file.
+
+        Compiles already running finish (``already_running`` counts them) and pages
+        Knowledge already wrote stay. Cancelling a source's compiles
+        (``attachment_id``) also stops that source's running sync; cancelling the
+        whole project's (neither id) stops every running sync in the project
+        (``sync_stopped``, ``syncs_stopped``; ``sync_job_id`` for a source). Answers
+        ``{cancel_id, scope, status, will_be_skipped, already_running, sync_stopped,
+        syncs_stopped, sync_job_id, next_sync, note}`` while the queue drains;
+        :meth:`compile_queue` follows it. A project admin may cancel anything in the
+        project, the person who attached a source or uploaded a file its compiles.
+        """
+        body: dict[str, str] = {}
+        if attachment_id is not None:
+            body["attachment_id"] = attachment_id
+        if artifact_id is not None:
+            body["artifact_id"] = artifact_id
+        return self._run(ops.build_knowledge_cancel_queued_compiles(project_id, body=body))
