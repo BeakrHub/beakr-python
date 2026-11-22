@@ -225,3 +225,31 @@ def test_find_resolution_option_takes_the_letter_or_the_number() -> None:
     assert find_resolution_option(options, "1") is SECTION_OPTION
     assert find_resolution_option(options, "3") is None
     assert find_resolution_option(None, "A") is None
+
+
+@respx.mock
+def test_review_flags_lists_only_review_proposals(client) -> None:
+    route = respx.get(f"{BASE}/v1/knowledge/wiki/proposals").respond(
+        200,
+        json={
+            "data": [{"id": "f1", "proposal_type": "review", "status": "pending"}],
+            "has_more": False,
+            "next_cursor": None,
+        },
+    )
+    flags = client.knowledge.proposals.review_flags(project_id="p1")
+    assert [flag["id"] for flag in flags] == ["f1"]
+    params = dict(route.calls.last.request.url.params)
+    assert params["proposal_type"] == "review"
+    assert params["status"] == "pending" and params["project_id"] == "p1"
+
+
+@respx.mock
+def test_list_sends_proposal_type_only_when_given(client) -> None:
+    route = respx.get(f"{BASE}/v1/knowledge/wiki/proposals").respond(
+        200, json={"data": [], "has_more": False, "next_cursor": None}
+    )
+    client.knowledge.proposals.list(proposal_type="edit")
+    assert route.calls.last.request.url.params["proposal_type"] == "edit"
+    client.knowledge.proposals.list()
+    assert "proposal_type" not in route.calls.last.request.url.params

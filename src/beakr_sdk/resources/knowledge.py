@@ -124,12 +124,31 @@ class Proposals(Resource[M]):
         status: str = "pending",
         project_id: str | None = None,
         limit: int = 50,
+        proposal_type: str | None = None,
     ) -> Any:
+        """One page of proposals, newest first.
+
+        ``proposal_type`` keeps one kind: ``review`` lists only review flags
+        (:meth:`review_flags`), others include ``create``, ``edit``, ``archive``,
+        ``mv`` and ``find_replace``.
+        """
         return self._run_then(
-            ops.build_knowledge_list_proposals(status=status, project_id=project_id, limit=limit),
+            ops.build_knowledge_list_proposals(
+                status=status, project_id=project_id, limit=limit, proposal_type=proposal_type
+            ),
             # The paginated envelope (``data``), or the older ``proposals`` wrapper.
             lambda r: as_list(r, "data", "proposals"),
         )
+
+    def review_flags(
+        self, *, project_id: str | None = None, status: str = "pending", limit: int = 50
+    ) -> Any:
+        """Review flags only (``proposal_type=review``), open ones by default.
+
+        A review flag is a section Knowledge flagged as contradicted, unverifiable
+        or unclear; resolve one with :meth:`resolution_options` and :meth:`resolve`.
+        """
+        return self.list(status=status, project_id=project_id, limit=limit, proposal_type="review")
 
     @returns(ops.build_knowledge_get_proposal)
     def show(self, proposal_id: str) -> Any:
@@ -204,9 +223,11 @@ class Proposals(Resource[M]):
         anything, so options you never saw are never applied. Returns ``{status,
         proposal_id, page_id, section_id, new_revision}``.
 
-        Where a person must accept proposals, a key or token is refused
-        (:class:`~beakr_sdk.errors.PersonReviewRequiredError`) unless it holds
-        ``proposals:accept``, as for :meth:`accept`.
+        Where the project requires a person to accept proposals, a person, or a
+        key with the ``proposals:accept`` (reviewer) permission, must apply it, as
+        for :meth:`accept`: any other key or token is refused with
+        :class:`~beakr_sdk.errors.PersonReviewRequiredError` (403). A scheduled
+        job closes flags with a reviewer key.
         """
         if (option_id is None) == (section_body is None):
             raise ValueError("proposals.resolve takes exactly one of option_id or section_body.")
@@ -279,6 +300,10 @@ class Proposals(Resource[M]):
         A page that changed since ``expected_revision`` is refused (409,
         :class:`~beakr_sdk.errors.ConflictError`) and nothing is applied.
         :meth:`resolve` reads ``section_id`` and checks the revision for you.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
         """
         return self._run(
             ops.build_knowledge_resolve_proposal_conflict(
@@ -293,6 +318,10 @@ class Proposals(Resource[M]):
 
         ``option_id`` must be one :meth:`resolution_options` returned for
         ``expected_revision``; a card that changed since is refused (409).
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
         """
         body = {"option_id": option_id, "expected_revision": expected_revision}
         return self._run(ops.build_knowledge_resolve_conflict_with_rows(proposal_id, body=body))
@@ -306,6 +335,10 @@ class Proposals(Resource[M]):
         ``{status, proposal_id, updated, skipped}``: ``status`` is ``resolved``
         when any card changed, ``unchanged`` when none did (the review stays
         pending), and each skipped card says why.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
         """
         if outcome not in RESOLVE_OUTCOMES:
             raise ValueError(
