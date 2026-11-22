@@ -76,6 +76,7 @@ def upload_flow(
     relative_path: str | None = None,
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
+    version_of: str | None = None,
 ) -> Flow:
     """Upload one file; returns ``{"artifact", "upload", "folders", "job_id", "status_url", ...}``.
 
@@ -103,6 +104,7 @@ def upload_flow(
             relative_path=relative_path if relative_path != path.name else None,
             on_existing=on_existing,
             written_by_agent=written_by_agent,
+            version_of=version_of,
         )
     )
 

@@ -181,6 +181,10 @@ print(again["result"], again["version_no"], again["artifact"]["id"])
 beakr.files.upload("q3.pdf", project_id=project_id, on_existing="new")
 # Mark an upload as an agent's work, not a person's:
 beakr.files.upload("summary.md", project_id=project_id, written_by_agent=True)
+# Add a version to one particular file, whatever the upload is called:
+beakr.files.upload("q3-final.pdf", project_id=project_id, version_of=first["artifact"]["id"])
+for version in beakr.files.iter_versions(first["artifact"]["id"]):
+    print(version["version_no"], version["written_by_agent"])
 ```
 
 Several files of that name in the folder raise `ConflictError` (code

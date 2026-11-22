@@ -324,3 +324,31 @@ def test_async_upload_passes_them_through(big_file) -> None:
     asyncio.run(run())
     completed = json.loads(routes["complete"].calls[0].request.content)
     assert completed["written_by_agent"] is True
+
+
+@respx.mock
+def test_version_of_is_sent_as_artifact_id(big_file) -> None:
+    routes = _routes()
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        client.files.upload(big_file, project_id="p1", version_of="a9")
+        client.files.uploads.complete("u1", artifact_id="a8")
+    assert json.loads(routes["complete"].calls[0].request.content)["artifact_id"] == "a9"
+    assert json.loads(routes["complete"].calls[1].request.content) == {"artifact_id": "a8"}
+
+
+@respx.mock
+def test_versions_lists_a_files_versions() -> None:
+    route = respx.get(f"{API}/v1/artifacts/a1/versions").respond(
+        200,
+        json={
+            "data": [{"id": "v1", "version_no": 1, "written_by_agent": True}],
+            "next_cursor": None,
+            "has_more": False,
+        },
+    )
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        page = client.files.versions("a1")
+        every = list(client.files.iter_versions("a1"))
+    assert page["data"][0]["written_by_agent"] is True
+    assert [v["id"] for v in every] == ["v1"]
+    assert route.called

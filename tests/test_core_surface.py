@@ -95,7 +95,8 @@ def test_the_async_client_has_the_same_surface() -> None:
 def test_unlisted_methods_are_not_on_public_resources() -> None:
     with Beakr(api_key="bk_live_test", base_url=BASE) as beakr:
         for resource, method in [
-            ("files", "versions"),
+            # files.versions came back when GET /v1/artifacts/{id}/versions was
+            # documented (2026-11-22, written_by_agent on each version).
             ("files", "preview"),
             ("knowledge", "undo_run"),
             ("knowledge", "changes"),

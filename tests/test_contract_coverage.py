@@ -47,6 +47,7 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/artifacts/{}", lambda c: c.files.get("a1")),
     ("PATCH /v1/artifacts/{}", lambda c: c.files.update("a1", title="New")),
     ("GET /v1/artifacts/{}/content", lambda c: c.files.content("a1")),
+    ("GET /v1/artifacts/{}/versions", lambda c: c.files.versions("a1")),
     ("POST /v1/artifacts/read", lambda c: c.files.read("deals/memo.pdf", unit="p. 7")),
     ("POST /v1/artifacts/download-url", lambda c: c.files.download_link("beakr-source:v1:x")),
     ("POST /v1/artifacts/{}/knowledge", lambda c: c.files.send_to_knowledge("a1")),

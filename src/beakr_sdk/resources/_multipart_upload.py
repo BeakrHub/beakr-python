@@ -72,6 +72,7 @@ def multipart_upload_flow(
     relative_path: str | None = None,
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
+    version_of: str | None = None,
 ) -> Flow:
     """Upload (or, with ``upload_id``, resume) one large file.
 
@@ -80,6 +81,8 @@ def multipart_upload_flow(
     folder it was uploaded from) is sent on ``complete``, which records it.
     ``on_existing`` (``"version"``, the server's default, or ``"new"``) and
     ``written_by_agent`` are sent on ``complete`` as given; None leaves them out.
+    ``version_of`` (a file id) is sent as ``artifact_id``: the upload becomes a
+    new version of that file.
 
     Returns ``{"artifact", "upload", "result", "job_id", "status_url", ...}``
     from completion.
@@ -144,6 +147,7 @@ def multipart_upload_flow(
                     "relative_path": relative_path,
                     "on_existing": on_existing,
                     "written_by_agent": written_by_agent,
+                    "artifact_id": version_of,
                 }
             ),
         )

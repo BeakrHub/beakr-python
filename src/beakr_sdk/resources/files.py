@@ -96,6 +96,7 @@ class Files(Resource[M]):
         relative_path: str | None = None,
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
+        version_of: str | None = None,
     ) -> Any:
         """Upload one file; indexing starts on its own.
 
@@ -116,7 +117,8 @@ class Files(Resource[M]):
         server's default. ``"new"`` always creates a separate file. The answer's
         ``result`` says which happened (``created``, ``versioned``, ``restored``
         or ``unchanged``). ``written_by_agent=True`` marks the upload as an
-        agent's work.
+        agent's work. ``version_of`` (a file id in the same project) adds the
+        upload as a new version of that file, whatever its name.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -133,6 +135,7 @@ class Files(Resource[M]):
                 relative_path=relative_path or upload_relative_path(file_path),
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
+                version_of=version_of,
             )
         )
 
@@ -147,11 +150,12 @@ class Files(Resource[M]):
         relative_path: str | None = None,
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
+        version_of: str | None = None,
     ) -> Any:
         """Finish an interrupted resumable upload, sending only the parts S3 lacks.
 
-        ``relative_path``, ``on_existing`` and ``written_by_agent`` are sent as in
-        :meth:`upload`.
+        ``relative_path``, ``on_existing``, ``written_by_agent`` and ``version_of``
+        are sent as in :meth:`upload`.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -169,6 +173,7 @@ class Files(Resource[M]):
                 relative_path=relative_path or upload_relative_path(file_path),
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
+                version_of=version_of,
             )
         )
 
@@ -385,6 +390,22 @@ class Files(Resource[M]):
             cursor=None,
         )
         return self._iter(call)
+
+    def versions(
+        self, artifact_id: str, *, limit: int = _DEFAULT_PAGE_SIZE, cursor: str | None = None
+    ) -> Any:
+        """One page of a file's versions, oldest first: ``{data, next_cursor, has_more}``.
+
+        Each version has ``version_no``, ``size_bytes``, ``content_hash``,
+        ``created_at`` and ``written_by_agent``.
+        """
+        return self._run(
+            ops.build_files_list_artifact_versions(artifact_id, limit=limit, cursor=cursor)
+        )
+
+    def iter_versions(self, artifact_id: str, *, page_size: int = _DEFAULT_PAGE_SIZE) -> Any:
+        """Every version of a file, oldest first, page by page."""
+        return self._iter(ops.build_files_list_artifact_versions(artifact_id, limit=page_size))
 
     @returns(ops.build_files_get_artifact)
     def get(self, artifact_id: str) -> Any:

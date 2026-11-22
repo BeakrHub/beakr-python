@@ -66,12 +66,14 @@ class Uploads(Resource[M]):
         description: str | None = None,
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
+        artifact_id: str | None = None,
     ) -> Any:
         """Assemble the parts and create the file. Omit ``parts`` to use every part S3 holds.
 
         ``on_existing`` (``"version"`` by default on the server) adds the upload as a
         version of the file already at its path; ``"new"`` creates a separate file.
-        ``written_by_agent`` marks the upload as an agent's work.
+        ``written_by_agent`` marks the upload as an agent's work. ``artifact_id``
+        adds the upload as a new version of that file instead.
         """
         body = clean_body(
             {
@@ -81,6 +83,7 @@ class Uploads(Resource[M]):
                 "description": description,
                 "on_existing": on_existing,
                 "written_by_agent": written_by_agent,
+                "artifact_id": artifact_id,
             }
         )
         return self._run(ops.build_uploads_complete_upload(upload_id, body=body))
