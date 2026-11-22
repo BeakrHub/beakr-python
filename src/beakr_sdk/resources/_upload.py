@@ -74,6 +74,8 @@ def upload_flow(
     description: str | None = None,
     ingest: bool = True,
     relative_path: str | None = None,
+    on_existing: str | None = None,
+    written_by_agent: bool | None = None,
 ) -> Flow:
     """Upload one file; returns ``{"artifact", "upload", "folders", "job_id", "status_url", ...}``.
 
@@ -99,6 +101,8 @@ def upload_flow(
             mime_type=mime_type,
             ingest=ingest,
             relative_path=relative_path if relative_path != path.name else None,
+            on_existing=on_existing,
+            written_by_agent=written_by_agent,
         )
     )
 
@@ -164,6 +168,8 @@ def upload_folder_flow(
     include_hidden: bool = False,
     ingest: bool = True,
     root_folder: bool = True,
+    on_existing: str | None = None,
+    written_by_agent: bool | None = None,
 ) -> Flow:
     """Upload every file under ``root``; with ``mirror_folders``, recreate subdirectories.
 
@@ -195,6 +201,8 @@ def upload_folder_flow(
             folder_id=target_folder,
             ingest=ingest,
             relative_path=upload_relative_path(file_path, root),
+            on_existing=on_existing,
+            written_by_agent=written_by_agent,
         )
         results.append({"path": str(file_path), **uploaded})
     return results

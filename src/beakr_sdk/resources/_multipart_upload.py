@@ -5,8 +5,9 @@
    upload skips them);
 3. ``POST /v1/uploads/{id}/parts`` for presigned URLs, a window at a time, and a
    PUT of each part's bytes with no Beakr credential, keeping its ``ETag``;
-4. ``POST /v1/uploads/{id}/complete``, which creates the file and answers with
-   its indexing job.
+4. ``POST /v1/uploads/{id}/complete``, which creates the file (or, when the
+   folder already holds a file of that name, adds a version to it; see
+   ``on_existing``) and answers with its indexing job.
 
 Only one part is held in memory at a time. If the process dies, the upload id
 (``BeakrUploadInterrupted.upload_id``) resumes it with ``files.resume_upload``.
@@ -69,14 +70,19 @@ def multipart_upload_flow(
     part_size: int | None = None,
     upload_id: str | None = None,
     relative_path: str | None = None,
+    on_existing: str | None = None,
+    written_by_agent: bool | None = None,
 ) -> Flow:
     """Upload (or, with ``upload_id``, resume) one large file.
 
     ``project_id`` is needed to start an upload; a resumed one already has its.
     ``relative_path`` (the file's path on the caller's machine, relative to the
     folder it was uploaded from) is sent on ``complete``, which records it.
+    ``on_existing`` (``"version"``, the server's default, or ``"new"``) and
+    ``written_by_agent`` are sent on ``complete`` as given; None leaves them out.
 
-    Returns ``{"artifact", "upload", "job_id", "status_url"}`` from completion.
+    Returns ``{"artifact", "upload", "result", "job_id", "status_url", ...}``
+    from completion.
     """
     size = path.stat().st_size
     if upload_id is None:
@@ -136,6 +142,8 @@ def multipart_upload_flow(
                     "artifact_type": artifact_type,
                     "description": description,
                     "relative_path": relative_path,
+                    "on_existing": on_existing,
+                    "written_by_agent": written_by_agent,
                 }
             ),
         )

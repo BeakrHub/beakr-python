@@ -94,6 +94,8 @@ class Files(Resource[M]):
         description: str | None = None,
         ingest: bool = True,
         relative_path: str | None = None,
+        on_existing: Literal["version", "new"] | None = None,
+        written_by_agent: bool | None = None,
     ) -> Any:
         """Upload one file; indexing starts on its own.
 
@@ -107,6 +109,14 @@ class Files(Resource[M]):
         ``relative_path`` is the path recorded on the file, which Knowledge reads
         name it by and ``read`` accepts; by default a relative ``path`` with
         directories (``deals/acme/memo.pdf``) is recorded as given.
+
+        When the folder already holds a file with this file's name (``title``,
+        else the file name), the upload is added to it as a new version and the
+        Knowledge built from it is updated: ``on_existing="version"``, the
+        server's default. ``"new"`` always creates a separate file. The answer's
+        ``result`` says which happened (``created``, ``versioned``, ``restored``
+        or ``unchanged``). ``written_by_agent=True`` marks the upload as an
+        agent's work.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -121,6 +131,8 @@ class Files(Resource[M]):
                 description=description,
                 ingest=ingest,
                 relative_path=relative_path or upload_relative_path(file_path),
+                on_existing=on_existing,
+                written_by_agent=written_by_agent,
             )
         )
 
@@ -133,10 +145,13 @@ class Files(Resource[M]):
         artifact_type: str | None = None,
         description: str | None = None,
         relative_path: str | None = None,
+        on_existing: Literal["version", "new"] | None = None,
+        written_by_agent: bool | None = None,
     ) -> Any:
         """Finish an interrupted resumable upload, sending only the parts S3 lacks.
 
-        ``relative_path`` is recorded as in :meth:`upload`.
+        ``relative_path``, ``on_existing`` and ``written_by_agent`` are sent as in
+        :meth:`upload`.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -152,6 +167,8 @@ class Files(Resource[M]):
                 mime_type=mime_type,
                 upload_id=upload_id,
                 relative_path=relative_path or upload_relative_path(file_path),
+                on_existing=on_existing,
+                written_by_agent=written_by_agent,
             )
         )
 
@@ -270,6 +287,8 @@ class Files(Resource[M]):
         include_hidden: bool = False,
         ingest: bool = True,
         root_folder: bool = True,
+        on_existing: Literal["version", "new"] | None = None,
+        written_by_agent: bool | None = None,
     ) -> Any:
         """Upload a directory tree; subdirectories become folders unless ``mirror_folders``
         is False.
@@ -281,6 +300,9 @@ class Files(Resource[M]):
         paths; False puts the directory's contents straight into ``folder_id``.
         Folders that already exist under the same name are reused, so uploading two
         trees with shared subfolder names, or the same tree again, does not fail.
+        Uploading the same tree again adds a version to each file already there
+        (``on_existing="version"``, the server's default); ``"new"`` creates
+        second copies. ``written_by_agent`` marks every upload as an agent's.
         """
         root = Path(path)
         if not root.is_dir():
@@ -294,6 +316,8 @@ class Files(Resource[M]):
                 include_hidden=include_hidden,
                 ingest=ingest,
                 root_folder=root_folder,
+                on_existing=on_existing,
+                written_by_agent=written_by_agent,
             )
         )
 
