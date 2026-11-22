@@ -954,6 +954,36 @@ class Knowledge(Resource[M]):
             )
         )
 
+    @returns(ops.build_knowledge_convert_row_type_to_field)
+    def convert_row_type_to_field(
+        self,
+        key: str,
+        *,
+        on_type: str,
+        name: str,
+        description: str | None = None,
+        scope: str = "project",
+        project_id: str | None = None,
+    ) -> Any:
+        """Turn a card type recorded as rows into a field of the type its rows belong on.
+
+        Adds the field ``name`` (with an optional ``description``, what to record
+        under it) to the type ``on_type``, and turns the row type ``key`` off; it
+        becomes a card type. ``scope`` and ``project_id`` are as on
+        :meth:`update_card_type`. Returns ``{page_type, former_row_type}``. Cards
+        and rows already written are not changed.
+        """
+        body = clean_body(
+            {
+                "on_type": on_type,
+                "name": name,
+                "description": description,
+                "scope": scope,
+                "project_id": project_id,
+            }
+        )
+        return self._run(ops.build_knowledge_convert_row_type_to_field(key, body=body))
+
     @returns(ops.build_knowledge_copy_wiki_page_types)
     def copy_card_types(
         self,
