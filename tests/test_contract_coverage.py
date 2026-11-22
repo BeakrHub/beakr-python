@@ -147,6 +147,12 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.knowledge.remove_card_type_copy("batch", project_id="p1"),
     ),
     (
+        "POST /v1/knowledge/wiki/page-types/{}/to-field",
+        lambda c: c.knowledge.convert_row_type_to_field(
+            "assay_run", on_type="assay", name="Runs", project_id="p1"
+        ),
+    ),
+    (
         "POST /v1/knowledge/wiki/page-types/copy",
         lambda c: c.knowledge.copy_card_types("p1", "p2", ["batch"]),
     ),
