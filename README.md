@@ -185,16 +185,21 @@ print(beakr.jobs.get(stopped["sync_job_id"])["status"])  # running (cancelling),
 
 ### Asking a person about review flags
 
-Draft an interview with one question per open review flag (conflicts by
-default; `include` adds other kinds, `proposal_ids` names flags). It is saved as
-a draft and never sent: a person edits and sends it from `edit_url`, and each
-answer comes back on its flag as a suggestion.
+Turn a project's open review flags into one interview, one question per flag
+(every kind by default, up to 30; `kinds` narrows it, `proposal_ids` names
+flags). Without `participant` it is a draft a person edits and sends from
+`edit_url`; with one, it also gets that person's link, shown once. Beakr sends
+nothing, and each answer comes back on its flag as a suggestion.
 
 ```python
-draft = beakr.interviews.draft_from_reviews(project_id, include=["ambiguity"], participant="Dana")
+draft = beakr.interviews.draft_from_reviews(
+    project_id,
+    kinds=["contradiction", "ambiguity"],
+    participant={"name": "Dana", "email": "dana@example.com"},
+)
 for q in draft["questions"]:
     print(q["number"], q["question"], q["proposal_id"])
-print(draft["edit_url"] or draft["message"])
+print(draft.get("link_url") or draft["edit_url"] or draft["message"])  # link_url is shown once
 ```
 
 ### Skills

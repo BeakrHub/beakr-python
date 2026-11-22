@@ -19,6 +19,7 @@ once, then :meth:`Interviews.link_for` one link per person.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 from beakr_sdk._calls import clean_body
@@ -134,34 +135,40 @@ class Interviews(Resource[M]):
         project_id: str,
         *,
         proposal_ids: list[str] | None = None,
-        include: list[str] | None = None,
+        kinds: list[str] | None = None,
         max_questions: int | None = None,
-        participant: str | None = None,
+        participant: Mapping[str, Any] | None = None,
+        link_expires_in_days: int | None = None,
         title: str | None = None,
         goals: str | None = None,
     ) -> Any:
-        """Draft an interview from a project's open review flags. Nothing is sent.
+        """Turn a project's open review flags into one interview: one question per flag.
 
-        One plain-language key question per flag, saved as a draft sendable
-        interview. By default it asks about the project's open conflict flags,
-        newest first, up to ``max_questions`` (15, at most 30); ``include`` adds
-        ``"ambiguity"``, ``"unverifiable"``, ``"likely_error"`` or ``"all"``, and
-        ``proposal_ids`` names the flags instead. ``participant`` (a name or role)
-        only shapes the wording. Needs ``interviews:write`` and ``kb:read``.
+        By default every open review flag, newest first, up to ``max_questions``
+        (30, the interview's cap); flags past it come back in ``skipped`` as
+        ``over_question_limit``. ``kinds`` (``"contradiction"``, ``"ambiguity"``,
+        ``"unverifiable"``, ``"likely_error"``, ``"other"``) narrows it, and
+        ``proposal_ids`` (up to 100) names the flags instead. Needs
+        ``interviews:write`` and ``kb:read``.
 
-        The answer carries ``interview`` (the draft, or ``None`` when there was
-        nothing to ask, with ``empty_reason`` and ``message``), ``questions``
-        (each with its ``proposal_id``, ``kind``, ``page_title``, ``reason``),
-        ``skipped`` and ``edit_url``, where a person edits and sends it. Send it
-        with :meth:`link_for`; each answer comes back on its flag
+        Without ``participant`` the interview is a draft a person edits
+        (``edit_url``) and sends. ``participant`` is ``{"user_id": ...}`` (a
+        member) or ``{"name": ..., "email": ...}`` (either; a
+        ``models.ParticipantIn``): the interview then also gets that person's link,
+        ``link`` (``link_id``, ``label``, ``expires_at``, ``result_url``) and
+        ``link_url``, shown once (absent on a replay, ``secret_redacted``), valid
+        for ``link_expires_in_days`` (14). Beakr sends nothing; deliver the link
+        yourself. Nothing to ask answers ``interview: None`` with
+        ``empty_reason`` and ``message``. Each answer comes back on its flag
         (``interview_answers`` on the proposal) as a suggestion.
         """
         body = clean_body(
             {
                 "proposal_ids": [str(p) for p in proposal_ids] if proposal_ids else None,
-                "include": list(include) if include else None,
+                "kinds": list(kinds) if kinds else None,
                 "max_questions": max_questions,
-                "participant": participant,
+                "participant": clean_body(dict(participant)) if participant else None,
+                "link_expires_in_days": link_expires_in_days,
                 "title": title,
                 "goals": goals,
             }

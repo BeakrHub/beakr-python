@@ -33,7 +33,10 @@ DRAFTED = {
             "linked": True,
         }
     ],
-    "skipped": [{"proposal_id": "f2", "reason": "not_open"}],
+    "skipped": [
+        {"proposal_id": "f2", "reason": "not_open"},
+        {"proposal_id": "f3", "reason": "over_question_limit"},
+    ],
     "questions_written_by": "model",
     "edit_url": "https://app.example/interviews/send?edit=s1",
     "empty_reason": None,
@@ -54,18 +57,23 @@ NOTHING = {
     ("kwargs", "body"),
     [
         ({}, {}),
-        ({"include": ["ambiguity", "likely_error"]}, {"include": ["ambiguity", "likely_error"]}),
         (
-            {"proposal_ids": ["f1", "f2"], "max_questions": 5, "participant": "Dana"},
-            {"proposal_ids": ["f1", "f2"], "max_questions": 5, "participant": "Dana"},
+            {"kinds": ["contradiction", "ambiguity"], "max_questions": 5},
+            {"kinds": ["contradiction", "ambiguity"], "max_questions": 5},
         ),
+        ({"proposal_ids": ["f1", "f2"]}, {"proposal_ids": ["f1", "f2"]}),
+        (
+            {"participant": {"name": "Dana", "email": None}, "link_expires_in_days": 7},
+            {"participant": {"name": "Dana"}, "link_expires_in_days": 7},
+        ),
+        ({"participant": {"user_id": "u1"}}, {"participant": {"user_id": "u1"}}),
         (
             {"title": "Lot 42", "goals": "Settle the dates"},
             {"title": "Lot 42", "goals": "Settle the dates"},
         ),
-        ({"proposal_ids": [], "include": []}, {}),
+        ({"proposal_ids": [], "kinds": [], "participant": {}}, {}),
     ],
-    ids=["defaults", "include", "named-flags", "title-goals", "empty-lists"],
+    ids=["defaults", "kinds", "named-flags", "participant", "member", "title-goals", "empties"],
 )
 @respx.mock
 def test_draft_from_reviews_sends_only_what_was_given(client, kwargs, body) -> None:
@@ -74,6 +82,25 @@ def test_draft_from_reviews_sends_only_what_was_given(client, kwargs, body) -> N
     assert json.loads(route.calls.last.request.content) == body
     # A draft is a create: it carries an idempotency key like every write.
     assert route.calls.last.request.headers.get("Idempotency-Key")
+
+
+@respx.mock
+def test_a_participant_gets_their_link_once(client) -> None:
+    with_link = {
+        **DRAFTED,
+        "link": {
+            "link_id": "l1",
+            "label": "Dana",
+            "expires_at": "2026-12-06T00:00:00Z",
+            "result_url": "/v1/interview/sendables/links/l1/result",
+        },
+        "link_url": "https://app.example/i/tok",
+        "secret_redacted": False,
+    }
+    respx.post(FROM_REVIEWS).respond(201, json=with_link)
+    answer = client.interviews.draft_from_reviews("p1", participant={"name": "Dana"})
+    assert answer["link_url"] == "https://app.example/i/tok"
+    assert answer["link"]["link_id"] == "l1"
 
 
 @respx.mock
@@ -96,6 +123,6 @@ def test_project_id_is_one_encoded_path_segment(client) -> None:
 @respx.mock
 async def test_async_draft_from_reviews(async_client) -> None:
     route = respx.post(FROM_REVIEWS).respond(201, json=DRAFTED)
-    answer = await async_client.interviews.draft_from_reviews("p1", include=["all"])
+    answer = await async_client.interviews.draft_from_reviews("p1", kinds=["other"])
     assert answer == DRAFTED
-    assert json.loads(route.calls.last.request.content) == {"include": ["all"]}
+    assert json.loads(route.calls.last.request.content) == {"kinds": ["other"]}
