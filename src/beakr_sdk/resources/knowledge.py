@@ -954,6 +954,38 @@ class Knowledge(Resource[M]):
             )
         )
 
+    @returns(ops.build_knowledge_convert_row_type_to_field)
+    def make_row_type_a_field(
+        self,
+        key: str,
+        *,
+        on_type: str,
+        name: str,
+        description: str | None = None,
+        scope: str = "project",
+        project_id: str | None = None,
+    ) -> Any:
+        """Make the row type ``key`` a field ``name`` of the card type ``on_type``.
+
+        ``description`` says what to record under the field. The row type is
+        turned off for the scope; cards and rows already written are unchanged.
+        ``scope`` is ``project`` (with ``project_id``) or ``org``.
+        """
+        return self._run(
+            ops.build_knowledge_convert_row_type_to_field(
+                key,
+                body=clean_body(
+                    {
+                        "on_type": on_type,
+                        "name": name,
+                        "description": description,
+                        "scope": scope,
+                        "project_id": project_id,
+                    }
+                ),
+            )
+        )
+
     @returns(ops.build_knowledge_copy_wiki_page_types)
     def copy_card_types(
         self,
