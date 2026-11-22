@@ -140,6 +140,32 @@ One call changes at most 500 cards; `cards_remaining` says how many are left,
 and the same call again changes the next ones. An applied change shows in the
 project's activity, where an owner of the project can undo it.
 
+A project also chooses where its card types come from (`inherit`:
+`organization`, `builtin` or `own`) and whether Beakr itself may add or change
+them (`agent_may_change`). A change is a dry run until you pass `dry_run=False`:
+
+```python
+print(beakr.knowledge.card_type_settings(project_id))  # {"inherit": ..., "agent_may_change": ...}
+preview = beakr.knowledge.set_card_type_settings(project_id, inherit="own")
+for dropped in preview["types_dropped"]:
+    print(dropped["key"], dropped["live_cards"])  # types it would stop being offered
+beakr.knowledge.set_card_type_settings(
+    project_id, inherit="own", keep_types_in_use=True, dry_run=False
+)
+
+for entry in beakr.knowledge.iter_card_type_history(project_id=project_id):
+    print(entry["created_at"], entry["title"])
+for waiting in beakr.knowledge.iter_card_type_suggestions(project_id):
+    print(waiting["kind"], waiting["title"])  # held_back, or retype_suggested
+beakr.knowledge.dismiss_card_type_suggestion(suggestion_id, project_id)
+
+beakr.projects.create("Lyon", card_types={"inherit": "builtin", "agent_may_change": False})
+```
+
+Applying a settings change never changes or removes a card or a type. A new
+project on `inherit: "own"` needs its types in the same call:
+`copy_from_project_id` (with optional `copy_keys`) or `types`.
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers
