@@ -201,6 +201,28 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "POST /v1/knowledge/wiki/proposals/{}/dismiss",
         lambda c: c.knowledge.proposals.dismiss("wp1"),
     ),
+    (
+        "GET /v1/knowledge/wiki/proposals/{}/conflict",
+        lambda c: c.knowledge.proposals.conflict("wp1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolutions",
+        lambda c: c.knowledge.proposals.resolution_options("wp1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve",
+        lambda c: c.knowledge.proposals.resolve_section(
+            "wp1", section_id="dosing", section_body="## Dosing", expected_revision=3
+        ),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve-rows",
+        lambda c: c.knowledge.proposals.resolve_rows("wp1", option_id="A", expected_revision=3),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve-cards",
+        lambda c: c.knowledge.proposals.resolve_on_every_card("wp1", "both_valid"),
+    ),
     ("GET /v1/knowledge/wiki/search", lambda c: c.knowledge.pages.search("binding")),
     (
         "POST /v1/knowledge/wiki/write",

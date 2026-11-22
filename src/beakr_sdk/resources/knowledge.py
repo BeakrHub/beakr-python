@@ -26,11 +26,11 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-from beakr_sdk._calls import clean_body
+from beakr_sdk._calls import Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
-from beakr_sdk.errors import KnowledgeCommandError
+from beakr_sdk.errors import ConflictError, KnowledgeCommandError
 from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources._base import Resource, as_list
 from beakr_sdk.resources.agent_review import AgentReview
@@ -42,6 +42,46 @@ from beakr_sdk.resources.knowledge_pages import KnowledgePages
 RESEARCH_TIMEOUT = 170.0
 #: Seconds a quick research call waits: the engine ends a quick run within 16s.
 QUICK_RESEARCH_TIMEOUT = 30.0
+#: Seconds drafting a review flag's resolutions may take, whatever the client's
+#: timeout: the engine bounds the model call well inside two minutes.
+RESOLUTIONS_TIMEOUT = 150.0
+#: How a contradiction review is settled on every card it lists.
+RESOLVE_OUTCOMES = frozenset({"keep_disputed", "adopt_disputing", "both_valid"})
+
+
+def find_resolution_option(options: Any, option_id: str) -> dict[str, Any] | None:
+    """A drafted option by its id (``A``, ``b`` ...) or its 1-based number, else None."""
+    listed = [option for option in options or [] if isinstance(option, dict)]
+    wanted = str(option_id or "").strip()
+    for option in listed:
+        if str(option.get("id") or "").strip().casefold() == wanted.casefold():
+            return option
+    if wanted.isdigit() and 1 <= int(wanted) <= len(listed):
+        return listed[int(wanted) - 1]
+    return None
+
+
+def _section_resolution(
+    section_id: str, section_body: str, expected_revision: int, option_id: str | None = None
+) -> dict[str, Any]:
+    """The body of ``POST .../resolve``: the section's new Markdown, pinned to a revision."""
+    return clean_body(
+        {
+            "section_id": section_id,
+            "new_section_body": section_body,
+            "expected_revision": expected_revision,
+            "option_id": option_id,
+        }
+    )
+
+
+def _page_changed(proposal_id: str, expected: int, current: Any) -> ConflictError:
+    return ConflictError(
+        f"The page changed since revision {expected} (now {current}); nothing was applied. "
+        f"Draft the options again with proposals.resolution_options({proposal_id!r}) and "
+        "choose again.",
+        code="conflict",
+    )
 
 
 def result_text(result: dict[str, Any]) -> str:
@@ -84,12 +124,31 @@ class Proposals(Resource[M]):
         status: str = "pending",
         project_id: str | None = None,
         limit: int = 50,
+        proposal_type: str | None = None,
     ) -> Any:
+        """One page of proposals, newest first.
+
+        ``proposal_type`` keeps one kind: ``review`` lists only review flags
+        (:meth:`review_flags`), others include ``create``, ``edit``, ``archive``,
+        ``mv`` and ``find_replace``.
+        """
         return self._run_then(
-            ops.build_knowledge_list_proposals(status=status, project_id=project_id, limit=limit),
+            ops.build_knowledge_list_proposals(
+                status=status, project_id=project_id, limit=limit, proposal_type=proposal_type
+            ),
             # The paginated envelope (``data``), or the older ``proposals`` wrapper.
             lambda r: as_list(r, "data", "proposals"),
         )
+
+    def review_flags(
+        self, *, project_id: str | None = None, status: str = "pending", limit: int = 50
+    ) -> Any:
+        """Review flags only (``proposal_type=review``), open ones by default.
+
+        A review flag is a section Knowledge flagged as contradicted, unverifiable
+        or unclear; resolve one with :meth:`resolution_options` and :meth:`resolve`.
+        """
+        return self.list(status=status, project_id=project_id, limit=limit, proposal_type="review")
 
     @returns(ops.build_knowledge_get_proposal)
     def show(self, proposal_id: str) -> Any:
@@ -113,6 +172,183 @@ class Proposals(Resource[M]):
     @returns(ops.build_knowledge_dismiss_proposal)
     def dismiss(self, proposal_id: str) -> Any:
         return self._run(ops.build_knowledge_dismiss_proposal(proposal_id))
+
+    # -- review flags ----------------------------------------------------------
+    #
+    # A review flag is a proposal of type ``review``: a section Knowledge flagged
+    # as contradicted, unverifiable or unclear. Read it with :meth:`conflict`,
+    # draft resolutions with :meth:`resolution_options` and apply the one chosen
+    # with :meth:`resolve`, pinned to the page revision they were drafted against.
+
+    @returns(ops.build_knowledge_get_proposal_conflict)
+    def conflict(self, proposal_id: str) -> Any:
+        """A review flag: the flagged section and its current text, why it was
+        flagged, the sources on each side and the page's ``current_revision``."""
+        return self._run(ops.build_knowledge_get_proposal_conflict(proposal_id))
+
+    @returns(ops.build_knowledge_generate_proposal_conflict_resolutions)
+    def resolution_options(self, proposal_id: str) -> Any:
+        """Beakr's drafted resolutions for a pending review flag.
+
+        Returns ``{proposal_id, section_id, current_revision, options, cached,
+        no_draft_reason}``. Each option has ``id`` (A, B ...), ``label``,
+        ``summary`` and ``new_section_body``, plus ``edits`` for a long section
+        or ``row_operation`` and ``table_changes`` for a card's Facts or
+        Connections table. Drafting uses a model and can take up to two minutes
+        the first time (this call waits :data:`RESOLUTIONS_TIMEOUT` seconds);
+        the options are kept for ``current_revision``, so asking again returns
+        them at once (``cached: true``) until the page changes.
+        """
+        call = ops.build_knowledge_generate_proposal_conflict_resolutions(proposal_id)
+        return self._run(dataclasses.replace(call, min_timeout=RESOLUTIONS_TIMEOUT))
+
+    def resolve(
+        self,
+        proposal_id: str,
+        *,
+        expected_revision: int,
+        option_id: str | None = None,
+        section_body: str | None = None,
+    ) -> Any:
+        """Resolve a review flag with a drafted option or your own section text.
+
+        Pass exactly one of ``option_id`` (an option's id from
+        :meth:`resolution_options`, or its 1-based number) and ``section_body``
+        (the flagged section's new Markdown), with the ``current_revision`` the
+        options were drafted (or the flag read) against as ``expected_revision``.
+        A card-table option is applied with :meth:`resolve_rows`, any other as a
+        section rewrite with :meth:`resolve_section`. The page's revision is read
+        first: when it has moved past ``expected_revision`` this raises
+        :class:`~beakr_sdk.errors.ConflictError` without drafting or applying
+        anything, so options you never saw are never applied. Returns ``{status,
+        proposal_id, page_id, section_id, new_revision}``.
+
+        Where the project requires a person to accept proposals, a person, or a
+        key with the ``proposals:accept`` (reviewer) permission, must apply it, as
+        for :meth:`accept`: any other key or token is refused with
+        :class:`~beakr_sdk.errors.PersonReviewRequiredError` (403). A scheduled
+        job closes flags with a reviewer key.
+        """
+        if (option_id is None) == (section_body is None):
+            raise ValueError("proposals.resolve takes exactly one of option_id or section_body.")
+
+        def flow() -> Flow:
+            conflict = yield ops.build_knowledge_get_proposal_conflict(proposal_id)
+            current = (conflict or {}).get("current_revision")
+            if current != expected_revision:
+                raise _page_changed(proposal_id, expected_revision, current)
+            if section_body is not None:
+                return (
+                    yield ops.build_knowledge_resolve_proposal_conflict(
+                        proposal_id,
+                        body=_section_resolution(
+                            str((conflict or {}).get("section_id") or ""),
+                            section_body,
+                            expected_revision,
+                        ),
+                    )
+                )
+            drafted = yield dataclasses.replace(
+                ops.build_knowledge_generate_proposal_conflict_resolutions(proposal_id),
+                min_timeout=RESOLUTIONS_TIMEOUT,
+            )
+            drafted = drafted or {}
+            if drafted.get("current_revision") != expected_revision:
+                raise _page_changed(proposal_id, expected_revision, drafted.get("current_revision"))
+            option = find_resolution_option(drafted.get("options"), str(option_id))
+            if option is None:
+                raise ValueError(
+                    f"Option {option_id!r} is not among this flag's drafted options; list "
+                    f"them with proposals.resolution_options({proposal_id!r})."
+                )
+            if isinstance(option.get("row_operation"), dict):
+                return (
+                    yield ops.build_knowledge_resolve_conflict_with_rows(
+                        proposal_id,
+                        body={
+                            "option_id": option.get("id"),
+                            "expected_revision": expected_revision,
+                        },
+                    )
+                )
+            return (
+                yield ops.build_knowledge_resolve_proposal_conflict(
+                    proposal_id,
+                    body=_section_resolution(
+                        str(drafted.get("section_id") or (conflict or {}).get("section_id") or ""),
+                        str(option.get("new_section_body") or ""),
+                        expected_revision,
+                        option.get("id"),
+                    ),
+                )
+            )
+
+        return self._drive(flow())
+
+    @returns(ops.build_knowledge_resolve_proposal_conflict)
+    def resolve_section(
+        self,
+        proposal_id: str,
+        *,
+        section_id: str,
+        section_body: str,
+        expected_revision: int,
+        option_id: str | None = None,
+    ) -> Any:
+        """Rewrite the flagged section and clear the flag (``POST .../resolve``).
+
+        A page that changed since ``expected_revision`` is refused (409,
+        :class:`~beakr_sdk.errors.ConflictError`) and nothing is applied.
+        :meth:`resolve` reads ``section_id`` and checks the revision for you.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        return self._run(
+            ops.build_knowledge_resolve_proposal_conflict(
+                proposal_id,
+                body=_section_resolution(section_id, section_body, expected_revision, option_id),
+            )
+        )
+
+    @returns(ops.build_knowledge_resolve_conflict_with_rows)
+    def resolve_rows(self, proposal_id: str, *, option_id: str, expected_revision: int) -> Any:
+        """Apply a drafted row option to a flagged card table (``POST .../resolve-rows``).
+
+        ``option_id`` must be one :meth:`resolution_options` returned for
+        ``expected_revision``; a card that changed since is refused (409).
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        body = {"option_id": option_id, "expected_revision": expected_revision}
+        return self._run(ops.build_knowledge_resolve_conflict_with_rows(proposal_id, body=body))
+
+    @returns(ops.build_knowledge_resolve_conflict_on_every_card)
+    def resolve_on_every_card(self, proposal_id: str, outcome: str) -> Any:
+        """Settle a contradiction review on every card it lists with one ``outcome``.
+
+        ``keep_disputed`` (the disputing row is deleted), ``adopt_disputing`` (the
+        row it disputed is deleted) or ``both_valid`` (both stand). Returns
+        ``{status, proposal_id, updated, skipped}``: ``status`` is ``resolved``
+        when any card changed, ``unchanged`` when none did (the review stays
+        pending), and each skipped card says why.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        if outcome not in RESOLVE_OUTCOMES:
+            raise ValueError(
+                f"outcome must be one of {', '.join(sorted(RESOLVE_OUTCOMES))}, not {outcome!r}."
+            )
+        return self._run(
+            ops.build_knowledge_resolve_conflict_on_every_card(
+                proposal_id, body={"outcome": outcome}
+            )
+        )
 
     def create(
         self,
