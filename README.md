@@ -183,6 +183,20 @@ stopped = beakr.integrations.cancel_source_sync(project_id, source_id)  # Confli
 print(beakr.jobs.get(stopped["sync_job_id"])["status"])  # running (cancelling), then cancelled
 ```
 
+### Asking a person about review flags
+
+Draft an interview with one question per open review flag (conflicts by
+default; `include` adds other kinds, `proposal_ids` names flags). It is saved as
+a draft and never sent: a person edits and sends it from `edit_url`, and each
+answer comes back on its flag as a suggestion.
+
+```python
+draft = beakr.interviews.draft_from_reviews(project_id, include=["ambiguity"], participant="Dana")
+for q in draft["questions"]:
+    print(q["number"], q["question"], q["proposal_id"])
+print(draft["edit_url"] or draft["message"])
+```
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers

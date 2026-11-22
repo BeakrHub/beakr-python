@@ -128,6 +128,46 @@ class Interviews(Resource[M]):
         body = {"project_ids": list(project_ids)}
         return self._run(ops.build_interviews_send_link_to_knowledge(link_id, body=body))
 
+    @returns(ops.build_interviews_draft_interview_from_reviews)
+    def draft_from_reviews(
+        self,
+        project_id: str,
+        *,
+        proposal_ids: list[str] | None = None,
+        include: list[str] | None = None,
+        max_questions: int | None = None,
+        participant: str | None = None,
+        title: str | None = None,
+        goals: str | None = None,
+    ) -> Any:
+        """Draft an interview from a project's open review flags. Nothing is sent.
+
+        One plain-language key question per flag, saved as a draft sendable
+        interview. By default it asks about the project's open conflict flags,
+        newest first, up to ``max_questions`` (15, at most 30); ``include`` adds
+        ``"ambiguity"``, ``"unverifiable"``, ``"likely_error"`` or ``"all"``, and
+        ``proposal_ids`` names the flags instead. ``participant`` (a name or role)
+        only shapes the wording. Needs ``interviews:write`` and ``kb:read``.
+
+        The answer carries ``interview`` (the draft, or ``None`` when there was
+        nothing to ask, with ``empty_reason`` and ``message``), ``questions``
+        (each with its ``proposal_id``, ``kind``, ``page_title``, ``reason``),
+        ``skipped`` and ``edit_url``, where a person edits and sends it. Send it
+        with :meth:`link_for`; each answer comes back on its flag
+        (``interview_answers`` on the proposal) as a suggestion.
+        """
+        body = clean_body(
+            {
+                "proposal_ids": [str(p) for p in proposal_ids] if proposal_ids else None,
+                "include": list(include) if include else None,
+                "max_questions": max_questions,
+                "participant": participant,
+                "title": title,
+                "goals": goals,
+            }
+        )
+        return self._run(ops.build_interviews_draft_interview_from_reviews(project_id, body=body))
+
     # --- Requests and sessions (interviews of you, or ones you ran) -----------
 
     # --- Working on requests and sessions --------------------------------------

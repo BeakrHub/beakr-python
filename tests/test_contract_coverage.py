@@ -96,6 +96,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "POST /v1/interview/sendables/links/{}/knowledge",
         lambda c: c.interviews.send_to_projects("l1", ["p1"]),
     ),
+    (
+        "POST /v1/projects/{}/interviews/from-reviews",
+        lambda c: c.interviews.draft_from_reviews("p1"),
+    ),
     ("GET /v1/integrations/tools", lambda c: c.integrations.tools(provider="slack")),
     (
         "POST /v1/integrations/tools/{}/call",
