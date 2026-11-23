@@ -303,6 +303,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         "POST /v1/projects/{}/sources/{}/sync/cancel",
         lambda c: c.integrations.cancel_source_sync("p1", "s1"),
     ),
+    (
+        "GET /v1/projects/{}/sources/{}/tracked-items",
+        lambda c: c.integrations.tracked_items("p1", "s1", state="skipped"),
+    ),
     ("GET /v1/projects/{}/knowledge-profile", lambda c: c.projects.knowledge_profile("p1")),
     (
         "PUT /v1/projects/{}/knowledge-profile",

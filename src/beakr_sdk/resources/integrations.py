@@ -70,6 +70,69 @@ class Integrations(Resource[M]):
         """
         return self._run(ops.build_integrations_cancel_source_sync(project_id, attachment_id))
 
+    @returns(ops.build_integrations_list_tracked_items)
+    def tracked_items(
+        self,
+        project_id: str,
+        attachment_id: str,
+        *,
+        state: Literal["pending", "ingested", "skipped", "removed"] | None = None,
+        reason_code: str | None = None,
+        search: str | None = None,
+        since: str | None = None,
+        cursor: str | None = None,
+        limit: int | None = None,
+    ) -> Any:
+        """One page of a project source's tracked items, and what became of each.
+
+        Answers ``{data, next_cursor, has_more, provider, kind, counts, matched}``.
+        Each item's ``state`` is ``pending`` (not read into Knowledge yet),
+        ``ingested``, ``skipped`` or ``removed``; a skipped item gives
+        ``reason_code`` and ``reason``, including when Knowledge read it and found
+        nothing to add (``nothing_to_add``). ``counts`` cover the whole source;
+        ``state``, ``reason_code``, ``search`` (title text) and ``since`` (synced
+        at or after an ISO 8601 time) narrow the page, and ``matched`` says how
+        many they keep. A sync's ``jobs.get(job_id)["result"]["outcomes"]`` links
+        here (``tracked_items_path``) narrowed to that sync.
+        """
+        return self._run(
+            ops.build_integrations_list_tracked_items(
+                project_id,
+                attachment_id,
+                state=state,
+                reason_code=reason_code,
+                search=search,
+                since=since,
+                cursor=cursor,
+                limit=limit,
+            )
+        )
+
+    @iterates(ops.build_integrations_list_tracked_items)
+    def iter_tracked_items(
+        self,
+        project_id: str,
+        attachment_id: str,
+        *,
+        state: Literal["pending", "ingested", "skipped", "removed"] | None = None,
+        reason_code: str | None = None,
+        search: str | None = None,
+        since: str | None = None,
+        page_size: int | None = None,
+    ) -> Any:
+        """:meth:`tracked_items`, every item, following the cursor."""
+        return self._iter(
+            ops.build_integrations_list_tracked_items(
+                project_id,
+                attachment_id,
+                state=state,
+                reason_code=reason_code,
+                search=search,
+                since=since,
+                limit=page_size,
+            )
+        )
+
     @returns_all(ops.build_integrations_list_integration_tools)
     def tools(self, *, provider: str | None = None, connector_id: str | None = None) -> Any:
         """Every read-only tool for the integrations the caller has connected and may use.
