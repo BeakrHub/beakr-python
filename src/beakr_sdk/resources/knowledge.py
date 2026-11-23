@@ -28,11 +28,11 @@ import dataclasses
 from collections.abc import Mapping
 from typing import Any
 
-from beakr_sdk._calls import clean_body
+from beakr_sdk._calls import Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
-from beakr_sdk.errors import KnowledgeCommandError
+from beakr_sdk.errors import ConflictError, KnowledgeCommandError
 from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources._base import Resource, as_list
 from beakr_sdk.resources.agent_review import AgentReview
@@ -44,6 +44,46 @@ from beakr_sdk.resources.knowledge_pages import KnowledgePages
 RESEARCH_TIMEOUT = 170.0
 #: Seconds a quick research call waits: the engine ends a quick run within 16s.
 QUICK_RESEARCH_TIMEOUT = 30.0
+#: Seconds drafting a review flag's resolutions may take, whatever the client's
+#: timeout: the engine bounds the model call well inside two minutes.
+RESOLUTIONS_TIMEOUT = 150.0
+#: How a contradiction review is settled on every card it lists.
+RESOLVE_OUTCOMES = frozenset({"keep_disputed", "adopt_disputing", "both_valid"})
+
+
+def find_resolution_option(options: Any, option_id: str) -> dict[str, Any] | None:
+    """A drafted option by its id (``A``, ``b`` ...) or its 1-based number, else None."""
+    listed = [option for option in options or [] if isinstance(option, dict)]
+    wanted = str(option_id or "").strip()
+    for option in listed:
+        if str(option.get("id") or "").strip().casefold() == wanted.casefold():
+            return option
+    if wanted.isdigit() and 1 <= int(wanted) <= len(listed):
+        return listed[int(wanted) - 1]
+    return None
+
+
+def _section_resolution(
+    section_id: str, section_body: str, expected_revision: int, option_id: str | None = None
+) -> dict[str, Any]:
+    """The body of ``POST .../resolve``: the section's new Markdown, pinned to a revision."""
+    return clean_body(
+        {
+            "section_id": section_id,
+            "new_section_body": section_body,
+            "expected_revision": expected_revision,
+            "option_id": option_id,
+        }
+    )
+
+
+def _page_changed(proposal_id: str, expected: int, current: Any) -> ConflictError:
+    return ConflictError(
+        f"The page changed since revision {expected} (now {current}); nothing was applied. "
+        f"Draft the options again with proposals.resolution_options({proposal_id!r}) and "
+        "choose again.",
+        code="conflict",
+    )
 
 
 def result_text(result: dict[str, Any]) -> str:
@@ -110,12 +150,31 @@ class Proposals(Resource[M]):
         status: str = "pending",
         project_id: str | None = None,
         limit: int = 50,
+        proposal_type: str | None = None,
     ) -> Any:
+        """One page of proposals, newest first.
+
+        ``proposal_type`` keeps one kind: ``review`` lists only review flags
+        (:meth:`review_flags`), others include ``create``, ``edit``, ``archive``,
+        ``mv`` and ``find_replace``.
+        """
         return self._run_then(
-            ops.build_knowledge_list_proposals(status=status, project_id=project_id, limit=limit),
+            ops.build_knowledge_list_proposals(
+                status=status, project_id=project_id, limit=limit, proposal_type=proposal_type
+            ),
             # The paginated envelope (``data``), or the older ``proposals`` wrapper.
             lambda r: as_list(r, "data", "proposals"),
         )
+
+    def review_flags(
+        self, *, project_id: str | None = None, status: str = "pending", limit: int = 50
+    ) -> Any:
+        """Review flags only (``proposal_type=review``), open ones by default.
+
+        A review flag is a section Knowledge flagged as contradicted, unverifiable
+        or unclear; resolve one with :meth:`resolution_options` and :meth:`resolve`.
+        """
+        return self.list(status=status, project_id=project_id, limit=limit, proposal_type="review")
 
     @returns(ops.build_knowledge_get_proposal)
     def show(self, proposal_id: str) -> Any:
@@ -154,6 +213,182 @@ class Proposals(Resource[M]):
         session (403 ``session_route_unavailable`` inside one).
         """
         return self._run(ops.build_knowledge_proposal_trail(proposal_id))
+    # -- review flags ----------------------------------------------------------
+    #
+    # A review flag is a proposal of type ``review``: a section Knowledge flagged
+    # as contradicted, unverifiable or unclear. Read it with :meth:`conflict`,
+    # draft resolutions with :meth:`resolution_options` and apply the one chosen
+    # with :meth:`resolve`, pinned to the page revision they were drafted against.
+
+    @returns(ops.build_knowledge_get_proposal_conflict)
+    def conflict(self, proposal_id: str) -> Any:
+        """A review flag: the flagged section and its current text, why it was
+        flagged, the sources on each side and the page's ``current_revision``."""
+        return self._run(ops.build_knowledge_get_proposal_conflict(proposal_id))
+
+    @returns(ops.build_knowledge_generate_proposal_conflict_resolutions)
+    def resolution_options(self, proposal_id: str) -> Any:
+        """Beakr's drafted resolutions for a pending review flag.
+
+        Returns ``{proposal_id, section_id, current_revision, options, cached,
+        no_draft_reason}``. Each option has ``id`` (A, B ...), ``label``,
+        ``summary`` and ``new_section_body``, plus ``edits`` for a long section
+        or ``row_operation`` and ``table_changes`` for a card's Facts or
+        Connections table. Drafting uses a model and can take up to two minutes
+        the first time (this call waits :data:`RESOLUTIONS_TIMEOUT` seconds);
+        the options are kept for ``current_revision``, so asking again returns
+        them at once (``cached: true``) until the page changes.
+        """
+        call = ops.build_knowledge_generate_proposal_conflict_resolutions(proposal_id)
+        return self._run(dataclasses.replace(call, min_timeout=RESOLUTIONS_TIMEOUT))
+
+    def resolve(
+        self,
+        proposal_id: str,
+        *,
+        expected_revision: int,
+        option_id: str | None = None,
+        section_body: str | None = None,
+    ) -> Any:
+        """Resolve a review flag with a drafted option or your own section text.
+
+        Pass exactly one of ``option_id`` (an option's id from
+        :meth:`resolution_options`, or its 1-based number) and ``section_body``
+        (the flagged section's new Markdown), with the ``current_revision`` the
+        options were drafted (or the flag read) against as ``expected_revision``.
+        A card-table option is applied with :meth:`resolve_rows`, any other as a
+        section rewrite with :meth:`resolve_section`. The page's revision is read
+        first: when it has moved past ``expected_revision`` this raises
+        :class:`~beakr_sdk.errors.ConflictError` without drafting or applying
+        anything, so options you never saw are never applied. Returns ``{status,
+        proposal_id, page_id, section_id, new_revision}``.
+
+        Where the project requires a person to accept proposals, a person, or a
+        key with the ``proposals:accept`` (reviewer) permission, must apply it, as
+        for :meth:`accept`: any other key or token is refused with
+        :class:`~beakr_sdk.errors.PersonReviewRequiredError` (403). A scheduled
+        job closes flags with a reviewer key.
+        """
+        if (option_id is None) == (section_body is None):
+            raise ValueError("proposals.resolve takes exactly one of option_id or section_body.")
+
+        def flow() -> Flow:
+            conflict = yield ops.build_knowledge_get_proposal_conflict(proposal_id)
+            current = (conflict or {}).get("current_revision")
+            if current != expected_revision:
+                raise _page_changed(proposal_id, expected_revision, current)
+            if section_body is not None:
+                return (
+                    yield ops.build_knowledge_resolve_proposal_conflict(
+                        proposal_id,
+                        body=_section_resolution(
+                            str((conflict or {}).get("section_id") or ""),
+                            section_body,
+                            expected_revision,
+                        ),
+                    )
+                )
+            drafted = yield dataclasses.replace(
+                ops.build_knowledge_generate_proposal_conflict_resolutions(proposal_id),
+                min_timeout=RESOLUTIONS_TIMEOUT,
+            )
+            drafted = drafted or {}
+            if drafted.get("current_revision") != expected_revision:
+                raise _page_changed(proposal_id, expected_revision, drafted.get("current_revision"))
+            option = find_resolution_option(drafted.get("options"), str(option_id))
+            if option is None:
+                raise ValueError(
+                    f"Option {option_id!r} is not among this flag's drafted options; list "
+                    f"them with proposals.resolution_options({proposal_id!r})."
+                )
+            if isinstance(option.get("row_operation"), dict):
+                return (
+                    yield ops.build_knowledge_resolve_conflict_with_rows(
+                        proposal_id,
+                        body={
+                            "option_id": option.get("id"),
+                            "expected_revision": expected_revision,
+                        },
+                    )
+                )
+            return (
+                yield ops.build_knowledge_resolve_proposal_conflict(
+                    proposal_id,
+                    body=_section_resolution(
+                        str(drafted.get("section_id") or (conflict or {}).get("section_id") or ""),
+                        str(option.get("new_section_body") or ""),
+                        expected_revision,
+                        option.get("id"),
+                    ),
+                )
+            )
+
+        return self._drive(flow())
+
+    @returns(ops.build_knowledge_resolve_proposal_conflict)
+    def resolve_section(
+        self,
+        proposal_id: str,
+        *,
+        section_id: str,
+        section_body: str,
+        expected_revision: int,
+        option_id: str | None = None,
+    ) -> Any:
+        """Rewrite the flagged section and clear the flag (``POST .../resolve``).
+
+        A page that changed since ``expected_revision`` is refused (409,
+        :class:`~beakr_sdk.errors.ConflictError`) and nothing is applied.
+        :meth:`resolve` reads ``section_id`` and checks the revision for you.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        return self._run(
+            ops.build_knowledge_resolve_proposal_conflict(
+                proposal_id,
+                body=_section_resolution(section_id, section_body, expected_revision, option_id),
+            )
+        )
+
+    @returns(ops.build_knowledge_resolve_conflict_with_rows)
+    def resolve_rows(self, proposal_id: str, *, option_id: str, expected_revision: int) -> Any:
+        """Apply a drafted row option to a flagged card table (``POST .../resolve-rows``).
+
+        ``option_id`` must be one :meth:`resolution_options` returned for
+        ``expected_revision``; a card that changed since is refused (409).
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        body = {"option_id": option_id, "expected_revision": expected_revision}
+        return self._run(ops.build_knowledge_resolve_conflict_with_rows(proposal_id, body=body))
+
+    @returns(ops.build_knowledge_resolve_conflict_on_every_card)
+    def resolve_on_every_card(self, proposal_id: str, outcome: str) -> Any:
+        """Settle a contradiction review on every card it lists with one ``outcome``.
+
+        ``keep_disputed`` (the disputing row is deleted), ``adopt_disputing`` (the
+        row it disputed is deleted) or ``both_valid`` (both stand). Returns
+        ``{status, proposal_id, updated, skipped}``: ``status`` is ``resolved``
+        when any card changed, ``unchanged`` when none did (the review stays
+        pending), and each skipped card says why.
+
+        Where the project requires a person, a person or a ``proposals:accept``
+        (reviewer) key must apply it
+        (:class:`~beakr_sdk.errors.PersonReviewRequiredError` otherwise).
+        """
+        if outcome not in RESOLVE_OUTCOMES:
+            raise ValueError(
+                f"outcome must be one of {', '.join(sorted(RESOLVE_OUTCOMES))}, not {outcome!r}."
+            )
+        return self._run(
+            ops.build_knowledge_resolve_conflict_on_every_card(
+                proposal_id, body={"outcome": outcome}
+            )
+        )
 
     def create(
         self,
@@ -695,3 +930,439 @@ class Knowledge(Resource[M]):
         )
 
     # -- Knowledge as resources (data, not the door's prose) ------------------
+
+    # -- card types ------------------------------------------------------------
+
+    @returns(ops.build_knowledge_list_wiki_page_types)
+    def list_card_types(
+        self,
+        *,
+        project_id: str | None = None,
+        include_proposed: bool | None = None,
+        include_deprecated: bool | None = None,
+        include_counts: bool | None = None,
+    ) -> Any:
+        """The card types a project uses: ``{page_types, map_mode, settings, kept_types}``.
+
+        Each type is as the narrowest scope that defines it holds it: ``scope`` is
+        ``project``, ``org`` or ``global``, and ``metadata_schema`` holds its
+        fields (``key_attributes``), which are required (``required_attributes``)
+        and whether an instance is a card or a row (``grain``). ``project_id`` is
+        the project's id. Types turned off or only proposed are left out unless
+        ``include_deprecated`` / ``include_proposed`` ask for them. With a project,
+        ``settings`` is its card type settings (``inherit``, ``agent_may_change``)
+        and ``kept_types`` the built-in types it is offered whatever it chooses.
+        ``include_counts`` adds ``card_count`` (live cards) to each type and
+        ``unlisted_types``: types the project's cards carry that are not listed.
+        """
+        return self._run(
+            ops.build_knowledge_list_wiki_page_types(
+                project_id=project_id,
+                include_proposed=include_proposed,
+                include_deprecated=include_deprecated,
+                include_counts=include_counts,
+            )
+        )
+
+    @returns(ops.build_knowledge_update_wiki_page_type)
+    def update_card_type(
+        self,
+        key: str,
+        *,
+        scope: str = "project",
+        project_id: str | None = None,
+        label: str | None = None,
+        description: str | None = None,
+        when_to_use: str | None = None,
+        when_not_to_use: str | None = None,
+        aliases: list[str] | None = None,
+        fields: list[dict[str, Any]] | None = None,
+        grain: str | None = None,
+        status: str | None = None,
+    ) -> Any:
+        """Change a card type as one scope holds it. Returns ``{page_type}``.
+
+        ``scope`` is ``project`` (one project, named by ``project_id``), ``org``
+        (every project in the organization without its own copy) or ``global``;
+        only scope ``project`` takes ``project_id``. A field left out is kept; a
+        list given replaces that list. ``fields`` is the type's fields in order,
+        each ``{"name", "required"}``; ``grain`` is ``card`` or ``row``;
+        ``status`` ``deprecated`` turns the type off for the scope.
+
+        Changing a type the scope only inherits gives the scope its own copy, and
+        ``page_type["overrides"]`` names the scope that copy stands in front of
+        (:meth:`remove_card_type_copy` drops it). A project's owners change its
+        types and an organization's admins the organization's. Cards already
+        written are not rewritten; later compiles use the new definition.
+        """
+        body = clean_body(
+            {
+                "scope": scope,
+                "project_id": project_id,
+                "label": label,
+                "description": description,
+                "when_to_use": when_to_use,
+                "when_not_to_use": when_not_to_use,
+                "aliases": aliases,
+                "fields": fields,
+                "grain": grain,
+                "status": status,
+            }
+        )
+        return self._run(ops.build_knowledge_update_wiki_page_type(key, body=body))
+
+    @returns(ops.build_knowledge_remove_wiki_page_type_override)
+    def remove_card_type_copy(
+        self, key: str, *, scope: str = "project", project_id: str | None = None
+    ) -> Any:
+        """Remove a scope's own copy of a card type. Returns ``{removed, key, scope}``.
+
+        ``scope`` is ``project`` (with ``project_id``) or ``org``; the scope goes
+        back to the type it inherits. A type defined only in that scope raises
+        ``ConflictError``: turn it off with ``update_card_type(key,
+        status="deprecated")`` instead.
+        """
+        return self._run(
+            ops.build_knowledge_remove_wiki_page_type_override(
+                key, scope=scope, project_id=project_id
+            )
+        )
+
+    @returns(ops.build_knowledge_convert_row_type_to_field)
+    def convert_row_type_to_field(
+        self,
+        key: str,
+        *,
+        on_type: str,
+        name: str,
+        description: str | None = None,
+        scope: str = "project",
+        project_id: str | None = None,
+    ) -> Any:
+        """Turn a card type recorded as rows into a field of the type its rows belong on.
+
+        Adds the field ``name`` (with an optional ``description``, what to record
+        under it) to the type ``on_type``, and turns the row type ``key`` off; it
+        becomes a card type. ``scope`` and ``project_id`` are as on
+        :meth:`update_card_type`. Returns ``{page_type, former_row_type}``. Cards
+        and rows already written are not changed.
+        """
+        body = clean_body(
+            {
+                "on_type": on_type,
+                "name": name,
+                "description": description,
+                "scope": scope,
+                "project_id": project_id,
+            }
+        )
+        return self._run(ops.build_knowledge_convert_row_type_to_field(key, body=body))
+
+    @returns(ops.build_knowledge_copy_wiki_page_types)
+    def copy_card_types(
+        self,
+        from_project_id: str,
+        to_project_id: str,
+        keys: list[str],
+        *,
+        replace: bool = False,
+    ) -> Any:
+        """Copy card types one project defines into another project.
+
+        Returns ``{copied, replaced, skipped}``. The destination gets its own
+        copies; the caller must see the source project and own the destination.
+        A key the source does not itself define is skipped as ``not_found``, and
+        one the destination already defines as ``exists`` unless ``replace`` is
+        true. Cards are not copied or changed.
+        """
+        body = {
+            "from_project_id": from_project_id,
+            "to_project_id": to_project_id,
+            "keys": list(keys),
+            "replace": replace,
+        }
+        return self._run(ops.build_knowledge_copy_wiki_page_types(body=body))
+
+    @returns(ops.build_knowledge_promote_wiki_page_types)
+    def promote_card_types(self, project_id: str, keys: list[str], *, replace: bool = False) -> Any:
+        """Copy card types a project defines up to the organization.
+
+        Returns ``{copied, replaced, skipped}``. ``project_id`` is the project
+        whose types to promote (the route names it ``source``); every project
+        without a copy of its own then inherits them. Needs an organization
+        admin. A key the project does not itself define is skipped as
+        ``not_found``, and one the organization already defines as ``exists``
+        unless ``replace`` is true.
+        """
+        body = {"source": project_id, "keys": list(keys), "replace": replace}
+        return self._run(ops.build_knowledge_promote_wiki_page_types(body=body))
+
+    # -- the cards a project already has ----------------------------------------
+
+    @returns(ops.build_knowledge_rename_wiki_page_type_fields)
+    def rename_card_type_fields(
+        self,
+        key: str,
+        project_id: str,
+        renames: Mapping[str, str] | list[dict[str, str]],
+        *,
+        dry_run: bool = True,
+        continue_event_id: str | None = None,
+    ) -> Any:
+        """Rename fields on every card of a type in one project. A dry run unless asked.
+
+        ``renames`` is ``{old: new}`` or the route's own list of ``{"old", "new"}``;
+        the type's field list is renamed with the cards, and rows that become the
+        same field are merged with their citations kept. With ``dry_run`` (the
+        default) nothing is written and the answer holds the counts: ``cards``,
+        ``cards_changed``, ``rows_renamed``, ``rows_merged`` and the renames it
+        would have ``applied`` and ``refused``. ``dry_run=False`` changes at most
+        500 cards a call; ``cards_remaining`` says how many are left, and the same
+        call again changes the next ones. Pass the first call's ``undo_event_id``
+        as ``continue_event_id`` on the later calls and the whole rename stays one
+        entry in the project's activity, with one undo. An applied change answers ``commit_id``
+        and ``undo_event_id`` and shows in the project's activity, where an owner
+        can undo it. Only the project's owners may; ``ConflictError`` while
+        Knowledge runs maintenance on the project.
+        """
+        pairs = (
+            [{"old": old, "new": new} for old, new in renames.items()]
+            if isinstance(renames, Mapping)
+            else [dict(pair) for pair in renames]
+        )
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "renames": pairs,
+                "dry_run": dry_run,
+                "continue_event_id": continue_event_id,
+            }
+        )
+        return self._run(ops.build_knowledge_rename_wiki_page_type_fields(key, body=body))
+
+    @returns(ops.build_knowledge_retype_wiki_page_type_cards)
+    def retype_cards(
+        self,
+        key: str,
+        project_id: str,
+        to_type: str,
+        *,
+        dry_run: bool = True,
+        suggestion_id: str | None = None,
+        continue_event_id: str | None = None,
+    ) -> Any:
+        """Move every card of a type in one project to another type. A dry run unless asked.
+
+        ``to_type`` must be an active type in the project whose instances are
+        cards. With ``dry_run`` (the default) nothing is written and the answer
+        holds ``cards``, the number that would move. ``dry_run=False`` moves at
+        most 500 cards a call (``cards_retyped``, ``cards_skipped``,
+        ``cards_remaining``) and answers ``commit_id`` and ``undo_event_id``. Pass
+        that ``undo_event_id`` as ``continue_event_id`` on the later calls of a
+        large move and it stays one entry in the project's activity, with one undo. A
+        card's text is not changed: if the two types name a field differently,
+        rename the fields on the target type afterwards
+        (:meth:`rename_card_type_fields`). Only the project's owners may.
+
+        ``suggestion_id`` is the pending suggestion this move answers (from
+        :meth:`card_type_suggestions`); an apply that leaves no card of the type
+        marks it applied. ``key`` may be a type no longer defined when the
+        project still has cards carrying it.
+        """
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "to_type": to_type,
+                "dry_run": dry_run,
+                "suggestion_id": suggestion_id,
+                "continue_event_id": continue_event_id,
+            }
+        )
+        return self._run(ops.build_knowledge_retype_wiki_page_type_cards(key, body=body))
+
+    # -- card type settings, history and suggestions ------------------------------
+
+    def card_type_settings(self, project_id: str) -> Any:
+        """A project's card type settings: ``{inherit, agent_may_change}``.
+
+        ``inherit`` is ``organization`` (the organization's types and the built-in
+        ones), ``builtin`` (the built-in ones only) or ``own`` (only the types the
+        project defines). ``agent_may_change`` says whether Beakr itself may add or
+        change the project's types. Read from :meth:`list_card_types`, which
+        answers them beside the types.
+        """
+        return self._run_then(
+            ops.build_knowledge_list_wiki_page_types(project_id=project_id),
+            lambda listing: (listing or {}).get("settings"),
+        )
+
+    @returns(ops.build_knowledge_change_card_type_settings)
+    def set_card_type_settings(
+        self,
+        project_id: str,
+        *,
+        inherit: str | None = None,
+        agent_may_change: bool | None = None,
+        keep_types_in_use: bool = False,
+        dry_run: bool = True,
+    ) -> Any:
+        """Change where a project's card types come from, or who may change them.
+
+        A dry run unless ``dry_run=False``: it writes nothing and answers
+        ``current``, ``requested`` and ``types_dropped``, each type the project
+        would stop being offered with its ``live_cards``. Pass ``inherit``
+        (``organization``, ``builtin`` or ``own``), ``agent_may_change``, or both.
+        ``own`` needs the project to define at least one active type whose
+        instances are cards. Applying never changes or removes a card or a type:
+        a dropped type that still has cards gets a suggestion to move them
+        (:meth:`card_type_suggestions`), or with ``keep_types_in_use`` becomes one
+        of the project's own types (``types_kept``). An applied change answers
+        ``history_id`` and ``undo_event_id``. Only the project's owners may.
+        """
+        body = clean_body(
+            {
+                "project_id": project_id,
+                "inherit": inherit,
+                "agent_may_change": agent_may_change,
+                "keep_types_in_use": keep_types_in_use,
+                "dry_run": dry_run,
+            }
+        )
+        return self._run(ops.build_knowledge_change_card_type_settings(body=body))
+
+    def card_type_history(
+        self,
+        *,
+        project_id: str | None = None,
+        scope: str | None = None,
+        key: str | None = None,
+        include_suggestions: bool | None = None,
+        limit: int | None = None,
+        cursor: str | None = None,
+    ) -> Any:
+        """One page of the changes to card types, newest first: ``{data, next_cursor, has_more}``.
+
+        A project's (``project_id``) or the organization's (``scope="org"``),
+        narrowed to one type with ``key``. Each entry says who (``actor_type``,
+        ``actor_user_id`` or ``actor_name``), when, the ``kind`` (``edited``,
+        ``turned_off``, ``created``, ``settings_changed``, ``undone`` ...), a
+        ``title``, the fields that ``changed`` and the definition ``before`` and
+        ``after``. ``include_suggestions`` adds suggestions with their ``state``.
+        :meth:`iter_card_type_history` follows every page.
+        """
+        return self._run(
+            ops.build_knowledge_list_card_type_history(
+                project_id=project_id,
+                scope=scope,
+                key=key,
+                include_suggestions=include_suggestions,
+                limit=limit,
+                cursor=cursor,
+            )
+        )
+
+    def iter_card_type_history(
+        self,
+        *,
+        project_id: str | None = None,
+        scope: str | None = None,
+        key: str | None = None,
+        include_suggestions: bool | None = None,
+        page_size: int | None = None,
+    ) -> Any:
+        """Every entry :meth:`card_type_history` lists, following its cursor."""
+        return self._iter(
+            ops.build_knowledge_list_card_type_history(
+                project_id=project_id,
+                scope=scope,
+                key=key,
+                include_suggestions=include_suggestions,
+                limit=page_size,
+            )
+        )
+
+    def card_type_suggestions(
+        self, project_id: str, *, limit: int | None = None, cursor: str | None = None
+    ) -> Any:
+        """One page of what waits for a person in a project: ``{data, next_cursor, has_more}``.
+
+        ``kind`` is ``held_back`` (a type Beakr was not allowed to add) or
+        ``retype_suggested`` (cards to move, with ``details["from_type"]`` and
+        ``details["cards"]``). Answer a move with :meth:`retype_cards` and its
+        ``suggestion_id``, or :meth:`dismiss_card_type_suggestion`.
+        """
+        return self._run(
+            ops.build_knowledge_list_card_type_suggestions(
+                project_id=project_id, limit=limit, cursor=cursor
+            )
+        )
+
+    def iter_card_type_suggestions(self, project_id: str, *, page_size: int | None = None) -> Any:
+        """Every suggestion :meth:`card_type_suggestions` lists, following its cursor."""
+        return self._iter(
+            ops.build_knowledge_list_card_type_suggestions(project_id=project_id, limit=page_size)
+        )
+
+    @returns(ops.build_knowledge_dismiss_card_type_suggestion)
+    def dismiss_card_type_suggestion(self, suggestion_id: str, project_id: str) -> Any:
+        """Dismiss one suggestion. Returns ``{suggestion, activity_event_id}``.
+
+        ``project_id`` is the project the suggestion belongs to. Only the
+        project's owners may; ``ConflictError`` if it was already answered.
+        """
+        return self._run(
+            ops.build_knowledge_dismiss_card_type_suggestion(
+                suggestion_id, body={"project_id": project_id}
+            )
+        )
+
+    # -- the compile queue -----------------------------------------------------------
+
+    @returns(ops.build_knowledge_get_compile_queue)
+    def compile_queue(
+        self,
+        project_id: str,
+        *,
+        attachment_id: str | None = None,
+        artifact_id: str | None = None,
+    ) -> Any:
+        """How many Knowledge compiles are queued and running, and the last cancel's progress.
+
+        For the whole project, or one connected source (``attachment_id``) or one
+        uploaded file (``artifact_id``); give at most one. Answers ``{queued,
+        running, last_cancel}``; ``last_cancel`` is ``None`` or ``{cancel_id,
+        status, done, total, summary, cancelled_by, cancelled_at}``, where
+        ``status`` is ``"cancelling"`` until ``done`` reaches ``total``.
+        """
+        return self._run(
+            ops.build_knowledge_get_compile_queue(
+                project_id, attachment_id=attachment_id, artifact_id=artifact_id
+            )
+        )
+
+    @returns(ops.build_knowledge_cancel_queued_compiles)
+    def cancel_queued_compiles(
+        self,
+        project_id: str,
+        *,
+        attachment_id: str | None = None,
+        artifact_id: str | None = None,
+    ) -> Any:
+        """Cancel the queued Knowledge compiles of a project, or of one source or file.
+
+        Compiles already running finish (``already_running`` counts them) and pages
+        Knowledge already wrote stay. Cancelling a source's compiles
+        (``attachment_id``) also stops that source's running sync; cancelling the
+        whole project's (neither id) stops every running sync in the project
+        (``sync_stopped``, ``syncs_stopped``; ``sync_job_id`` for a source). Answers
+        ``{cancel_id, scope, status, will_be_skipped, already_running, sync_stopped,
+        syncs_stopped, sync_job_id, next_sync, note}`` while the queue drains;
+        :meth:`compile_queue` follows it. A project admin may cancel anything in the
+        project, the person who attached a source or uploaded a file its compiles.
+        """
+        body: dict[str, str] = {}
+        if attachment_id is not None:
+            body["attachment_id"] = attachment_id
+        if artifact_id is not None:
+            body["artifact_id"] = artifact_id
+        return self._run(ops.build_knowledge_cancel_queued_compiles(project_id, body=body))

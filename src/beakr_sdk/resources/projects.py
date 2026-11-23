@@ -97,9 +97,20 @@ class Projects(Resource[M]):
         tags: builtins.list[str] | None = None,
         boundary: dict[str, str] | None = None,
         boundary_preset: str | None = None,
+        card_types: dict[str, Any] | None = None,
     ) -> Any:
-        """Create a project. Without ``boundary`` or ``boundary_preset`` (one, not both) it
-        starts with the organization's ``default_boundary``."""
+        """Create a project.
+
+        Without ``boundary`` or ``boundary_preset`` (one, not both) it starts with
+        the organization's ``default_boundary``.
+
+        ``card_types`` chooses where its card types come from and who may change
+        them: ``{"inherit": "organization" | "builtin" | "own",
+        "agent_may_change": bool}``. ``inherit: "own"`` needs types in the same
+        request: ``copy_from_project_id`` (with optional ``copy_keys``) to copy
+        another project's own types, or ``types``, a list of ``{"key", "label",
+        "description", "fields", "grain"}``.
+        """
         body = clean_body(
             {
                 "name": name,
@@ -107,6 +118,7 @@ class Projects(Resource[M]):
                 "tags": tags,
                 "boundary": boundary,
                 "boundary_preset": boundary_preset,
+                "card_types": card_types,
             }
         )
         return self._run(ops.build_projects_create_project(body=body))

@@ -56,6 +56,7 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ("GET /v1/artifacts/{}", lambda c: c.files.get("a1")),
     ("PATCH /v1/artifacts/{}", lambda c: c.files.update("a1", title="New")),
     ("GET /v1/artifacts/{}/content", lambda c: c.files.content("a1")),
+    ("GET /v1/artifacts/{}/versions", lambda c: c.files.versions("a1")),
     ("POST /v1/artifacts/read", lambda c: c.files.read("deals/memo.pdf", unit="p. 7")),
     ("POST /v1/artifacts/download-url", lambda c: c.files.download_link("beakr-source:v1:x")),
     ("POST /v1/artifacts/{}/knowledge", lambda c: c.files.send_to_knowledge("a1")),
@@ -104,6 +105,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     (
         "POST /v1/interview/sendables/links/{}/knowledge",
         lambda c: c.interviews.send_to_projects("l1", ["p1"]),
+    ),
+    (
+        "POST /v1/projects/{}/interviews/from-reviews",
+        lambda c: c.interviews.draft_from_reviews("p1"),
     ),
     ("GET /v1/integrations/tools", lambda c: c.integrations.tools(provider="slack")),
     (
@@ -179,6 +184,53 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     ),
     ("POST /v1/knowledge/research", lambda c: c.knowledge.research("who owns billing?")),
     ("POST /v1/knowledge/wiki/command", lambda c: c.knowledge.command("ls", check=False)),
+    ("GET /v1/knowledge/wiki/page-types", lambda c: c.knowledge.list_card_types(project_id="p1")),
+    (
+        "PATCH /v1/knowledge/wiki/page-types/{}",
+        lambda c: c.knowledge.update_card_type("batch", project_id="p1", label="Batch"),
+    ),
+    (
+        "DELETE /v1/knowledge/wiki/page-types/{}",
+        lambda c: c.knowledge.remove_card_type_copy("batch", project_id="p1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/{}/to-field",
+        lambda c: c.knowledge.convert_row_type_to_field(
+            "assay_run", on_type="assay", name="Runs", project_id="p1"
+        ),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/copy",
+        lambda c: c.knowledge.copy_card_types("p1", "p2", ["batch"]),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/promote",
+        lambda c: c.knowledge.promote_card_types("p1", ["batch"]),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/{}/rename-fields",
+        lambda c: c.knowledge.rename_card_type_fields("batch", "p1", {"Lot no": "Lot number"}),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/{}/retype-cards",
+        lambda c: c.knowledge.retype_cards("batch", "p1", "lot"),
+    ),
+    (
+        "GET /v1/knowledge/wiki/page-types/history",
+        lambda c: c.knowledge.card_type_history(project_id="p1"),
+    ),
+    (
+        "PUT /v1/knowledge/wiki/page-types/settings",
+        lambda c: c.knowledge.set_card_type_settings("p1", inherit="builtin"),
+    ),
+    (
+        "GET /v1/knowledge/wiki/page-types/suggestions",
+        lambda c: c.knowledge.card_type_suggestions("p1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/page-types/suggestions/{}/dismiss",
+        lambda c: c.knowledge.dismiss_card_type_suggestion("sg1", "p1"),
+    ),
     ("GET /v1/knowledge/wiki/pages", lambda c: c.knowledge.pages.list()),
     ("GET /v1/knowledge/wiki/pages/by-title", lambda c: c.knowledge.pages.by_title("BK-7")),
     ("GET /v1/knowledge/wiki/pages/{}", lambda c: c.knowledge.pages.get("pg1")),
@@ -205,6 +257,28 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
     (
         "POST /v1/knowledge/wiki/proposals/{}/dismiss",
         lambda c: c.knowledge.proposals.dismiss("wp1"),
+    ),
+    (
+        "GET /v1/knowledge/wiki/proposals/{}/conflict",
+        lambda c: c.knowledge.proposals.conflict("wp1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolutions",
+        lambda c: c.knowledge.proposals.resolution_options("wp1"),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve",
+        lambda c: c.knowledge.proposals.resolve_section(
+            "wp1", section_id="dosing", section_body="## Dosing", expected_revision=3
+        ),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve-rows",
+        lambda c: c.knowledge.proposals.resolve_rows("wp1", option_id="A", expected_revision=3),
+    ),
+    (
+        "POST /v1/knowledge/wiki/proposals/{}/resolve-cards",
+        lambda c: c.knowledge.proposals.resolve_on_every_card("wp1", "both_valid"),
     ),
     ("GET /v1/knowledge/wiki/search", lambda c: c.knowledge.pages.search("binding")),
     (
@@ -270,6 +344,15 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.projects.knowledge_failures("p1"),
     ),
     ("POST /v1/projects/{}/knowledge/retry-failed", lambda c: c.projects.retry_failed("p1")),
+    ("GET /v1/projects/{}/knowledge/compiles", lambda c: c.knowledge.compile_queue("p1")),
+    (
+        "POST /v1/projects/{}/knowledge/compiles/cancel",
+        lambda c: c.knowledge.cancel_queued_compiles("p1", attachment_id="s1"),
+    ),
+    (
+        "POST /v1/projects/{}/sources/{}/sync/cancel",
+        lambda c: c.integrations.cancel_source_sync("p1", "s1"),
+    ),
     ("GET /v1/projects/{}/knowledge-profile", lambda c: c.projects.knowledge_profile("p1")),
     (
         "PUT /v1/projects/{}/knowledge-profile",
