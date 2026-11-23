@@ -166,6 +166,30 @@ Applying a settings change never changes or removes a card or a type. A new
 project on `inherit: "own"` needs its types in the same call:
 `copy_from_project_id` (with optional `copy_keys`) or `types`.
 
+### Uploading a new version of a file
+
+Uploading to a folder that already holds a file with the same name adds a
+version to that file, and the Knowledge built from it is updated; it does not
+make a second file. `result` says what happened:
+
+```python
+first = beakr.files.upload("q3.pdf", project_id=project_id)  # result: "created"
+again = beakr.files.upload("q3.pdf", project_id=project_id)  # "versioned", same artifact id
+print(again["result"], again["version_no"], again["artifact"]["id"])
+# "unchanged" when the bytes are already the current version, "restored" when
+# they match an earlier one. on_existing="new" always creates a separate file.
+beakr.files.upload("q3.pdf", project_id=project_id, on_existing="new")
+# Mark an upload as an agent's work, not a person's:
+beakr.files.upload("summary.md", project_id=project_id, written_by_agent=True)
+# Add a version to one particular file, whatever the upload is called:
+beakr.files.upload("q3-final.pdf", project_id=project_id, version_of=first["artifact"]["id"])
+for version in beakr.files.iter_versions(first["artifact"]["id"]):
+    print(version["version_no"], version["written_by_agent"])
+```
+
+Several files of that name in the folder raise `ConflictError` (code
+`ambiguous_path`); pass `on_existing="new"` or remove the duplicate.
+
 ### Stopping queued work
 
 Compiles wait in a queue per project. Cancel the queued ones for the whole
