@@ -276,3 +276,79 @@ def test_a_presigned_url_keeps_its_signed_query_string(tmp_path) -> None:
     with Beakr(api_key="bk_live_test", base_url=API) as client:
         client.files.upload(path, project_id="p1")
     assert routes["put"].calls[0].request.url.params["X-Amz-Signature"] == "abc"
+
+
+@respx.mock
+def test_on_existing_and_written_by_agent_are_sent_on_complete(big_file) -> None:
+    routes = _routes()
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        client.files.upload(big_file, project_id="p1", on_existing="new", written_by_agent=True)
+    completed = json.loads(routes["complete"].calls[0].request.content)
+    assert completed["on_existing"] == "new"
+    assert completed["written_by_agent"] is True
+    # Neither is a start option: the server reads them when the file is placed.
+    created = json.loads(routes["create"].calls[0].request.content)
+    assert "on_existing" not in created and "written_by_agent" not in created
+
+
+@respx.mock
+def test_left_unset_they_are_omitted_so_the_server_versions_by_default(big_file) -> None:
+    routes = _routes()
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        client.files.upload(big_file, project_id="p1")
+    completed = json.loads(routes["complete"].calls[0].request.content)
+    assert "on_existing" not in completed
+    assert "written_by_agent" not in completed
+
+
+@respx.mock
+def test_resume_and_the_low_level_complete_pass_them_through(big_file) -> None:
+    routes = _routes()
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        client.files.resume_upload("u1", big_file, on_existing="version", written_by_agent=False)
+        client.files.uploads.complete("u1", on_existing="new", written_by_agent=True)
+    resumed = json.loads(routes["complete"].calls[0].request.content)
+    assert (resumed["on_existing"], resumed["written_by_agent"]) == ("version", False)
+    low_level = json.loads(routes["complete"].calls[1].request.content)
+    assert low_level == {"on_existing": "new", "written_by_agent": True}
+
+
+@respx.mock
+def test_async_upload_passes_them_through(big_file) -> None:
+    routes = _routes()
+
+    async def run() -> None:
+        async with AsyncBeakr(api_key="bk_live_test", base_url=API) as client:
+            await client.files.upload(big_file, project_id="p1", written_by_agent=True)
+
+    asyncio.run(run())
+    completed = json.loads(routes["complete"].calls[0].request.content)
+    assert completed["written_by_agent"] is True
+
+
+@respx.mock
+def test_version_of_is_sent_as_artifact_id(big_file) -> None:
+    routes = _routes()
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        client.files.upload(big_file, project_id="p1", version_of="a9")
+        client.files.uploads.complete("u1", artifact_id="a8")
+    assert json.loads(routes["complete"].calls[0].request.content)["artifact_id"] == "a9"
+    assert json.loads(routes["complete"].calls[1].request.content) == {"artifact_id": "a8"}
+
+
+@respx.mock
+def test_versions_lists_a_files_versions() -> None:
+    route = respx.get(f"{API}/v1/artifacts/a1/versions").respond(
+        200,
+        json={
+            "data": [{"id": "v1", "version_no": 1, "written_by_agent": True}],
+            "next_cursor": None,
+            "has_more": False,
+        },
+    )
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        page = client.files.versions("a1")
+        every = list(client.files.iter_versions("a1"))
+    assert page["data"][0]["written_by_agent"] is True
+    assert [v["id"] for v in every] == ["v1"]
+    assert route.called

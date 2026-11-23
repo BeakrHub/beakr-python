@@ -114,6 +114,138 @@ without one takes no files, connector sources or Knowledge: those calls raise
 `ProjectProfileRequiredError` (409 `project_profile_required`, a
 `ConflictError`) until the profile has content. Reads still work.
 
+### Change a project's card types
+
+Card types are the kinds of cards Knowledge writes for a project. A change is
+held by one scope: `project` (the default) changes the type for one project
+only, giving it its own copy when it inherited the type; `org` changes it for
+every project in the organization without its own copy. A project's owners
+change its types and an organization's admins the organization's.
+
+```python
+types = beakr.knowledge.list_card_types(project_id=project_id)["page_types"]
+saved = beakr.knowledge.update_card_type(
+    "deviation",
+    project_id=project_id,
+    description="One departure from a batch record",
+    fields=[{"name": "Root cause", "required": True}, {"name": "CAPA"}],
+)
+print(saved["page_type"].get("overrides"))  # the scope this copy stands in front of
+beakr.knowledge.remove_card_type_copy("deviation", project_id=project_id)
+```
+
+`fields` replaces the type's field list. Cards already written are not
+rewritten; later compiles use the new definition. `remove_card_type_copy`
+raises `ConflictError` for a type defined only in that scope: turn it off with
+`update_card_type(key, status="deprecated")` instead.
+
+`copy_card_types(from_project_id, to_project_id, keys)` copies the types
+one project defines into another project, and `promote_card_types(project_id,
+keys)` copies them up to the organization (an organization admin);
+both skip a type the destination already defines unless `replace=True`.
+
+A change to a type does not rewrite the cards a project already has. Two calls
+do, and both are dry runs that write nothing until you pass `dry_run=False`:
+
+```python
+preview = beakr.knowledge.rename_card_type_fields("deviation", project_id, {"Cause": "Root cause"})
+print(preview["cards_changed"], preview["applied"], preview["refused"])
+beakr.knowledge.rename_card_type_fields(
+    "deviation", project_id, {"Cause": "Root cause"}, dry_run=False
+)
+beakr.knowledge.retype_cards("deviation", project_id, "incident")  # dry run: counts only
+```
+
+One call changes at most 500 cards; `cards_remaining` says how many are left,
+and the same call again changes the next ones. An applied change shows in the
+project's activity, where an owner of the project can undo it.
+
+A project also chooses where its card types come from (`inherit`:
+`organization`, `builtin` or `own`) and whether Beakr itself may add or change
+them (`agent_may_change`). A change is a dry run until you pass `dry_run=False`:
+
+```python
+print(beakr.knowledge.card_type_settings(project_id))  # {"inherit": ..., "agent_may_change": ...}
+preview = beakr.knowledge.set_card_type_settings(project_id, inherit="own")
+for dropped in preview["types_dropped"]:
+    print(dropped["key"], dropped["live_cards"])  # types it would stop being offered
+beakr.knowledge.set_card_type_settings(
+    project_id, inherit="own", keep_types_in_use=True, dry_run=False
+)
+
+for entry in beakr.knowledge.iter_card_type_history(project_id=project_id):
+    print(entry["created_at"], entry["title"])
+for waiting in beakr.knowledge.iter_card_type_suggestions(project_id):
+    print(waiting["kind"], waiting["title"])  # held_back, or retype_suggested
+beakr.knowledge.dismiss_card_type_suggestion(suggestion_id, project_id)
+
+beakr.projects.create("Lyon", card_types={"inherit": "builtin", "agent_may_change": False})
+```
+
+Applying a settings change never changes or removes a card or a type. A new
+project on `inherit: "own"` needs its types in the same call:
+`copy_from_project_id` (with optional `copy_keys`) or `types`.
+
+### Uploading a new version of a file
+
+Uploading to a folder that already holds a file with the same name adds a
+version to that file, and the Knowledge built from it is updated; it does not
+make a second file. `result` says what happened:
+
+```python
+first = beakr.files.upload("q3.pdf", project_id=project_id)  # result: "created"
+again = beakr.files.upload("q3.pdf", project_id=project_id)  # "versioned", same artifact id
+print(again["result"], again["version_no"], again["artifact"]["id"])
+# "unchanged" when the bytes are already the current version, "restored" when
+# they match an earlier one. on_existing="new" always creates a separate file.
+beakr.files.upload("q3.pdf", project_id=project_id, on_existing="new")
+# Mark an upload as an agent's work, not a person's:
+beakr.files.upload("summary.md", project_id=project_id, written_by_agent=True)
+# Add a version to one particular file, whatever the upload is called:
+beakr.files.upload("q3-final.pdf", project_id=project_id, version_of=first["artifact"]["id"])
+for version in beakr.files.iter_versions(first["artifact"]["id"]):
+    print(version["version_no"], version["written_by_agent"])
+```
+
+Several files of that name in the folder raise `ConflictError` (code
+`ambiguous_path`); pass `on_existing="new"` or remove the duplicate.
+
+### Stopping queued work
+
+Compiles wait in a queue per project. Cancel the queued ones for the whole
+project or one source to stop paying for them; compiles already running finish,
+and what Knowledge wrote stays. Cancelling a source's compiles (or the whole
+project's) also stops the running syncs it covers:
+
+```python
+print(beakr.knowledge.compile_queue(project_id))  # {"queued": 12, "running": 2, "last_cancel": None}
+cancel = beakr.knowledge.cancel_queued_compiles(project_id, attachment_id=source_id)
+print(cancel["will_be_skipped"], cancel["already_running"], cancel["next_sync"])
+print(beakr.knowledge.compile_queue(project_id)["last_cancel"]["summary"])
+
+stopped = beakr.integrations.cancel_source_sync(project_id, source_id)  # ConflictError if none runs
+print(beakr.jobs.get(stopped["sync_job_id"])["status"])  # running (cancelling), then cancelled
+```
+
+### Asking a person about review flags
+
+Turn a project's open review flags into one interview, one question per flag
+(every kind by default, up to 30; `kinds` narrows it, `proposal_ids` names
+flags). Without `participant` it is a draft a person edits and sends from
+`edit_url`; with one, it also gets that person's link, shown once. Beakr sends
+nothing, and each answer comes back on its flag as a suggestion.
+
+```python
+draft = beakr.interviews.draft_from_reviews(
+    project_id,
+    kinds=["contradiction", "ambiguity"],
+    participant={"name": "Dana", "email": "dana@example.com"},
+)
+for q in draft["questions"]:
+    print(q["number"], q["question"], q["proposal_id"])
+print(draft.get("link_url") or draft["edit_url"] or draft["message"])  # link_url is shown once
+```
+
 ### Skills
 
 A skill is a SKILL.md folder your agent loads on demand. `skills.list` covers
