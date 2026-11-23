@@ -188,6 +188,8 @@ class Files(Resource[M]):
         wait: bool | Literal["index", "knowledge"] = False,
         timeout: float = 600.0,
         poll: float = 5.0,
+        on_existing: Literal["version", "new"] = "version",
+        written_by_agent: bool | None = None,
     ) -> Any:
         """Upload several files, or whole directories, as one batch (``/v1/bulk``).
 
@@ -196,6 +198,17 @@ class Files(Resource[M]):
         ``folder_id`` when given). Up to 1000 files per call. Returns the batch's
         completion: ``{batch_id, artifacts, folders, failed, job_id, status_url}``.
         Without ``project_id`` the files go to your personal project.
+
+        As with :meth:`upload`, a file whose folder already holds a file of its
+        name is added to that file as a new version (``on_existing="version"``,
+        the default here; the API's own default for a batch is ``"new"``), and
+        each entry of ``artifacts`` says what happened in ``result``
+        (``created``, ``versioned``, ``restored``, ``unchanged``) with
+        ``version_no``. ``"new"`` always creates a separate file. A folder
+        holding several files of that name, or one you cannot change, leaves
+        that file out: it is in ``failed`` with ``error_code``
+        (``ambiguous_path``, ``file_not_writable``). ``written_by_agent=True``
+        marks the files as an agent's work, not a person's.
 
         Indexing runs as one job. ``wait=True`` (or ``"index"``) waits for it and
         adds its final state as ``job``, and the upload's outcome as ``status``.
@@ -229,6 +242,8 @@ class Files(Resource[M]):
                 folder_id=folder_id,
                 ingest=ingest,
                 relative_paths=relative_paths,
+                on_existing=on_existing,
+                written_by_agent=written_by_agent,
             )
             if not wait:
                 return completed

@@ -328,11 +328,16 @@ def upload_many_flow(
     folder_id: str | None = None,
     ingest: bool = True,
     relative_paths: Mapping[str, str] | None = None,
+    on_existing: str | None = "version",
+    written_by_agent: bool | None = None,
 ) -> Flow:
     """Upload ``entries`` as one ``/v1/bulk`` batch; returns the batch's completion.
 
     ``relative_paths`` maps an entry's path in Beakr to the path recorded on its
     file (:func:`batch_relative_paths`); entries it leaves out record none.
+    ``on_existing`` (``"version"`` here, as a single upload does; the route's own
+    default is ``"new"``) and ``written_by_agent`` are sent on ``complete``; None
+    leaves them out.
 
     ``prepare`` creates the folders the paths name and a presigned URL per
     file, each file's bytes are PUT there (no Beakr credential), and
@@ -392,10 +397,14 @@ def upload_many_flow(
         )
     return (
         yield ops.build_uploads_complete_bulk_upload(
-            body={
-                "batch_id": prepared["batch_id"],
-                "files": completed_files,
-                "ingest_to_wiki": ingest,
-            }
+            body=clean_body(
+                {
+                    "batch_id": prepared["batch_id"],
+                    "files": completed_files,
+                    "ingest_to_wiki": ingest,
+                    "on_existing": on_existing,
+                    "written_by_agent": written_by_agent,
+                }
+            )
         )
     )
