@@ -108,3 +108,20 @@ def test_relative_path_is_never_absolute_or_parent_relative(tmp_path) -> None:
     assert upload_relative_path(Path("./memo.pdf")) is None
     assert upload_relative_path(tmp_path / "memo.pdf") is None
     assert upload_relative_path(Path("./deals/memo.pdf")) == "deals/memo.pdf"
+
+
+@respx.mock
+def test_batch_upload_versions_a_file_at_the_same_path_by_default(client, tmp_path) -> None:
+    """ENG-2465: like a single upload, a batch adds a version to a file already at a
+    path. The API's batch default is "new" (the web app's), so the SDK sends "version"."""
+    (tmp_path / "a.md").write_text("a")
+    routes = _mock_bulk()
+
+    client.files.upload_many(tmp_path / "a.md", project_id="p1")
+    client.files.upload_many(
+        tmp_path / "a.md", project_id="p1", on_existing="new", written_by_agent=True
+    )
+
+    default, chosen = (json.loads(call.request.content) for call in routes["complete"].calls)
+    assert default["on_existing"] == "version" and "written_by_agent" not in default
+    assert (chosen["on_existing"], chosen["written_by_agent"]) == ("new", True)
