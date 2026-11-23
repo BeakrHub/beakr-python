@@ -60,6 +60,7 @@ from beakr_sdk.errors import (
     UnsafePathError,
     ValidationError,
 )
+from beakr_sdk.installation_clients import InstallationClients, InstallationClientsWarning
 from beakr_sdk.query_spec import QuerySpec
 from beakr_sdk.resources.knowledge import cross_project_hold
 
@@ -76,6 +77,8 @@ __all__ = [
     "ConflictError",
     "CrossProjectOwnerRequiredError",
     "CrossProjectWriteRefusedError",
+    "InstallationClients",
+    "InstallationClientsWarning",
     "KnowledgeCommandError",
     "NotFoundError",
     "NotProvidedError",

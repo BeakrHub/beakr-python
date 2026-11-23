@@ -8,6 +8,10 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.capabilities import capabilities_flow
+from beakr_sdk.installation_clients import (
+    check_installation_clients_flow,
+    installation_clients_flow,
+)
 from beakr_sdk.resources._base import Resource
 
 
@@ -41,3 +45,25 @@ class Meta(Resource[M]):
         whether this one has integrations before a call answers 404.
         """
         return self._drive(capabilities_flow(self._client.base_url, refresh=refresh))
+
+    def installation_clients(self, *, refresh: bool = False) -> Any:
+        """The client versions this installation's release ships, or None.
+
+        A self-hosted installation serves its release's manifest at
+        ``/clients/manifest.json`` (no credential is sent): its release and, per
+        client package, the exact version and how to install it from the
+        installation's own package index. Returns an ``InstallationClients``
+        (``.release``, ``.version("beakr-sdk")``, ``.install_command(...)``), or
+        None from a server that serves none (hosted Beakr, an older release).
+        Kept per base URL for a few minutes; ``refresh=True`` reads it again.
+        """
+        return self._drive(installation_clients_flow(self._client.base_url, refresh=refresh))
+
+    def check_installation_clients(self, *, refresh: bool = False) -> Any:
+        """:meth:`installation_clients`, warning once if this beakr-sdk is not the one shipped.
+
+        The warning (``InstallationClientsWarning``) names the version the
+        installation's release ships and the command that installs it; it is
+        given once per process for each installation and version.
+        """
+        return self._drive(check_installation_clients_flow(self._client.base_url, refresh=refresh))
