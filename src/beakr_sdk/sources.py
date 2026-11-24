@@ -22,10 +22,13 @@ wherever the source came from::
         "file_id": "...",                    # Beakr's copy: `beakr files download <id>`
         "version_id": "...",                 # the version the passage was read from
       },
-      "evidence": {"excerpt", "locator", "fidelity", "evidence_kind", "anchor_status"},
+      "evidence": {"excerpt", "excerpt_kind", "context_excerpt", "locator",
+                   "source_recorded_at",
+                   "fidelity", "evidence_kind", "anchor_status"},  # last three deprecated
       "status": {"observed_at", "availability", "changed_since_cited"},
       "section": {"id", "title", "event_start", "event_end", "date_precision"},
-      "excerpts": [{"citation_key", "section_id", "unit_locator", "text"}],  # compact reads
+      "excerpts": [{"citation_key", "section_id", "unit_locator", "text",
+                    "excerpt_kind"}],      # compact reads
       "cited_passages": 3,                   # compact reads: passages of it the page cites
       "filed_by": {"user_name", "agent", "client", "run", "session", "text"},
       "retrieval": {"tool": "granola_get_note", "arguments": {"note_id": "not_..."}},
@@ -49,6 +52,14 @@ re-read every source a Knowledge read cites::
         elif record.get("location", {}).get("file_id"):  # a file: read its text
             print(beakr.files.read(record["source_ref"])["text"])
 
+``evidence.excerpt_kind`` says whose words ``excerpt`` is: ``quote`` for the
+source's own words (the only kind to show in quotation marks), ``description``
+for Beakr's own wording (a description of a figure, a computed value, or words
+not found in the source as written) and ``person`` for a person's attribution
+or a record in a system outside Beakr. A compact record's excerpt carries
+``excerpt_kind`` only when its text is not the source's own words. An engine
+from before the field sends neither, and the record then leaves it out.
+
 ``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
 ``user_note`` citation, by name only: never the person's ``user_id``, which the
 page sources route keeps in ``meta.filed_by``.
@@ -66,6 +77,13 @@ __all__ = ["UPLOAD_PROVIDER", "download_hint", "public_source", "read_call", "so
 
 #: ``provider`` of a source uploaded to Beakr rather than synced from a connector.
 UPLOAD_PROVIDER = "upload"
+
+#: Whose words a source's ``evidence.excerpt`` is (``SourceEvidence.excerpt_kind``).
+EXCERPT_KINDS = frozenset({"quote", "description", "person"})
+
+#: Whose words a compact record's excerpt ``text`` is when they are not the
+#: source's own (``SourceExcerpt.excerpt_kind``); a quote carries no kind.
+PASSAGE_EXCERPT_KINDS = frozenset({"description", "person"})
 
 #: The fields of ``filed_by`` a public record keeps, as the engine's
 #: ``citation_filer.PUBLIC_FILER_FIELDS`` plus its ``text`` line: names, never ids.
@@ -130,7 +148,15 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
     }
     evidence = {
         "excerpt": public_evidence.get("excerpt") or first("excerpt", "excerpt_text", "quote"),
+        "excerpt_kind": _known(
+            public_evidence.get("excerpt_kind") or first("excerpt_kind"), EXCERPT_KINDS
+        ),
+        # The passage around the quote, and when the source system recorded the
+        # quoted part. A page sources row carries both beside ``excerpt``.
+        "context_excerpt": public_evidence.get("context_excerpt") or first("context_excerpt"),
         "locator": public_evidence.get("locator") or first("locator", "chunk_ref"),
+        "source_recorded_at": public_evidence.get("source_recorded_at")
+        or first("source_recorded_at"),
         "fidelity": public_evidence.get("fidelity") or first("fidelity"),
         "evidence_kind": public_evidence.get("evidence_kind") or first("evidence_kind"),
         "anchor_status": public_evidence.get("anchor_status") or first("anchor_status"),
@@ -162,11 +188,7 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
     # its token and where it sits (``unit_locator``), and how many it cites.
     # Dropping them left a Sources listing with no excerpt for compact reads.
     excerpts = [
-        {
-            key: str(excerpt[key])
-            for key in ("citation_key", "section_id", "unit_locator", "text")
-            if excerpt.get(key) not in (None, "")
-        }
+        _public_excerpt(excerpt)
         for excerpt in source.get("excerpts") or []
         if isinstance(excerpt, dict) and excerpt.get("text")
     ]
@@ -188,6 +210,24 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         if public_filed:
             item["filed_by"] = public_filed
     return {key: value for key, value in item.items() if value not in (None, "")}
+
+
+def _public_excerpt(excerpt: dict[str, Any]) -> dict[str, str]:
+    """One passage of a compact record, with whose words it is when not the source's."""
+    passage = {
+        key: str(excerpt[key])
+        for key in ("citation_key", "section_id", "unit_locator", "text")
+        if excerpt.get(key) not in (None, "")
+    }
+    kind = _known(excerpt.get("excerpt_kind"), PASSAGE_EXCERPT_KINDS)
+    if kind:
+        passage["excerpt_kind"] = kind
+    return passage
+
+
+def _known(value: Any, allowed: frozenset[str]) -> str | None:
+    """``value`` when it is one of the documented ``allowed`` kinds, else ``None``."""
+    return value if isinstance(value, str) and value in allowed else None
 
 
 def _public_retrieval(retrieval: dict[str, Any]) -> dict[str, Any] | None:
