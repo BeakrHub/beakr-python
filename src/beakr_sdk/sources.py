@@ -22,7 +22,8 @@ wherever the source came from::
         "file_id": "...",                    # Beakr's copy: `beakr files download <id>`
         "version_id": "...",                 # the version the passage was read from
       },
-      "evidence": {"excerpt", "locator", "fidelity", "evidence_kind", "anchor_status"},
+      "evidence": {"excerpt", "context_excerpt", "locator", "source_recorded_at",
+                   "fidelity", "evidence_kind", "anchor_status"},
       "status": {"observed_at", "availability", "changed_since_cited"},
       "section": {"id", "title", "event_start", "event_end", "date_precision"},
       "excerpts": [{"citation_key", "section_id", "unit_locator", "text"}],  # compact reads
@@ -130,7 +131,12 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
     }
     evidence = {
         "excerpt": public_evidence.get("excerpt") or first("excerpt", "excerpt_text", "quote"),
+        # The passage around the quote, and when the source system recorded the
+        # quoted part. A page sources row carries both beside ``excerpt``.
+        "context_excerpt": public_evidence.get("context_excerpt") or first("context_excerpt"),
         "locator": public_evidence.get("locator") or first("locator", "chunk_ref"),
+        "source_recorded_at": public_evidence.get("source_recorded_at")
+        or first("source_recorded_at"),
         "fidelity": public_evidence.get("fidelity") or first("fidelity"),
         "evidence_kind": public_evidence.get("evidence_kind") or first("evidence_kind"),
         "anchor_status": public_evidence.get("anchor_status") or first("anchor_status"),
