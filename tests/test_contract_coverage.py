@@ -304,6 +304,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.integrations.cancel_source_sync("p1", "s1"),
     ),
     (
+        "GET /v1/projects/{}/integrations",
+        lambda c: c.integrations.list_for_project("p1"),
+    ),
+    (
         "GET /v1/projects/{}/sources/{}/tracked-items",
         lambda c: c.integrations.tracked_items("p1", "s1", state="skipped"),
     ),
