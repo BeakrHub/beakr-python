@@ -38,6 +38,22 @@ class Integrations(Resource[M]):
         """``{data: [...]}``: connections you can see, each with the projects it feeds."""
         return self._run(ops.build_integrations_list_integrations())
 
+    @returns(ops.build_integrations_list_project_integrations)
+    def list_for_project(
+        self, project_id: str, *, cursor: str | None = None, limit: int | None = None
+    ) -> Any:
+        """``{data: [...]}``: the connections a project's sources can be attached from.
+
+        Your own and the organization's active connections: the ones
+        ``POST /v1/projects/{project_id}/sources`` takes as ``connector_id``. Each
+        item has the shape :meth:`list` gives, with ``projects`` naming only this
+        project's sources. A key limited to projects may call it for one of them,
+        where the organization-wide :meth:`list` is refused (403).
+        """
+        return self._run(
+            ops.build_integrations_list_project_integrations(project_id, cursor=cursor, limit=limit)
+        )
+
     @returns(ops.build_integrations_connect_integration)
     def connect(self, provider: str, *, scope: Literal["user", "org"] = "user") -> Any:
         """``{provider, scope, connect_url, expires_at}``: open ``connect_url`` in a browser."""

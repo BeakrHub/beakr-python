@@ -207,6 +207,17 @@ stopped = beakr.integrations.cancel_source_sync(project_id, source_id)  # Confli
 print(beakr.jobs.get(stopped["sync_job_id"])["status"])  # running (cancelling), then cancelled
 ```
 
+### Connections a project can use
+
+A key limited to projects may not list the organization's connections
+(`integrations.list()` answers 403); it lists the ones a project's sources can
+be attached from instead:
+
+```python
+for connection in beakr.integrations.list_for_project(project_id)["data"]:
+    print(connection["id"], connection["provider"], connection["label"])
+```
+
 ### Why items were set aside
 
 A source's tracked items say what became of each item its syncs picked:
