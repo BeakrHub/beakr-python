@@ -196,3 +196,21 @@ def test_recompile_needs_either_items_or_all(client) -> None:
         client.integrations.recompile("p1", "s1")
     with pytest.raises(ValueError):
         client.integrations.recompile("p1", "s1", external_ids=["conn:t1"], all_items=True)
+
+
+PARTIAL = {
+    **LUNCH,
+    "external_id": "conn:t4",
+    "title": "Design review",
+    "state": "partial",
+    "reason_code": "compile_partial",
+    "unfinished_changes": 3,
+}
+
+
+@respx.mock
+def test_partial_items_are_filtered_by_their_state(client) -> None:
+    route = respx.get(TRACKED).respond(200, json=_page([PARTIAL]))
+    page = client.integrations.tracked_items("p1", "s1", state="partial")
+    assert page["data"][0]["unfinished_changes"] == 3
+    assert dict(route.calls.last.request.url.params) == {"state": "partial"}

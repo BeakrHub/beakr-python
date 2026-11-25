@@ -92,7 +92,8 @@ class Integrations(Resource[M]):
         project_id: str,
         attachment_id: str,
         *,
-        state: Literal["pending", "ingested", "skipped", "failed", "removed"] | None = None,
+        state: Literal["pending", "ingested", "partial", "skipped", "failed", "removed"]
+        | None = None,
         reason_code: str | None = None,
         search: str | None = None,
         since: str | None = None,
@@ -103,11 +104,14 @@ class Integrations(Resource[M]):
 
         Answers ``{data, next_cursor, has_more, provider, kind, counts, matched}``.
         Each item's ``state`` is ``pending`` (not read into Knowledge yet),
-        ``ingested``, ``skipped``, ``failed`` (its compile did not finish) or
-        ``removed``; a skipped or failed item gives ``reason_code`` and
-        ``reason``, including when Knowledge read it and found nothing to add
+        ``ingested``, ``partial`` (in Knowledge with ``unfinished_changes``
+        planned changes that did not land: ``compile_partial`` retried by the next
+        sync, ``compile_not_converging`` could not be applied), ``skipped``,
+        ``failed`` (nothing of its version reached Knowledge) or ``removed``; a
+        skipped, failed or partial item gives ``reason_code`` and ``reason``,
+        including when Knowledge read it and found nothing to add
         (``nothing_to_add``) and why a compile failed (``compile_failed``,
-        ``compile_partial``, ``compile_not_converging``, ``import_gave_up``).
+        ``import_gave_up``).
         ``counts`` cover the whole source; ``state``, ``reason_code``, ``search``
         (title text) and ``since`` (synced at or after an ISO 8601 time) narrow
         the page, and ``matched`` says how many they keep. A sync's
@@ -193,7 +197,8 @@ class Integrations(Resource[M]):
         project_id: str,
         attachment_id: str,
         *,
-        state: Literal["pending", "ingested", "skipped", "failed", "removed"] | None = None,
+        state: Literal["pending", "ingested", "partial", "skipped", "failed", "removed"]
+        | None = None,
         reason_code: str | None = None,
         search: str | None = None,
         since: str | None = None,
