@@ -7,6 +7,9 @@ the engine's ``TrackedItemsPage``.
 
 from __future__ import annotations
 
+import json
+
+import pytest
 import respx
 
 from .conftest import BASE
@@ -145,3 +148,51 @@ async def test_history_import_status_on_the_async_client(async_client) -> None:
     respx.get(HISTORY).respond(200, json=ENDED)
     status = await async_client.integrations.history_import_status("p1", "s1")
     assert status["status"] == "idle"
+
+
+RECOMPILE = f"{BASE}/v1/projects/p1/sources/s1/recompile"
+SENT = {
+    "mode": "full",
+    "dry_run": False,
+    "requested": 2,
+    "in_knowledge_left": 0,
+    "over_cap": 0,
+    "not_found": [],
+    "sync": "started",
+    "sync_job_id": "11111111-2222-3333-4444-555555555555",
+}
+
+
+@respx.mock
+def test_recompile_sends_the_named_items_in_the_mode_asked(client) -> None:
+    route = respx.post(RECOMPILE).respond(200, json=SENT)
+    answer = client.integrations.recompile(
+        "p1", "s1", external_ids=["conn:t1", "conn:t2"], mode="full"
+    )
+    assert answer["sync"] == "started"
+    assert json.loads(route.calls.last.request.content) == {
+        "mode": "full",
+        "dry_run": False,
+        "external_ids": ["conn:t1", "conn:t2"],
+    }
+
+
+@respx.mock
+async def test_recompile_every_item_as_a_dry_run_on_the_async_client(async_client) -> None:
+    route = respx.post(RECOMPILE).respond(
+        200, json={**SENT, "dry_run": True, "sync": "not_started"}
+    )
+    answer = await async_client.integrations.recompile("p1", "s1", all_items=True, dry_run=True)
+    assert answer["dry_run"] is True
+    assert json.loads(route.calls.last.request.content) == {
+        "mode": "retry",
+        "dry_run": True,
+        "all": True,
+    }
+
+
+def test_recompile_needs_either_items_or_all(client) -> None:
+    with pytest.raises(ValueError):
+        client.integrations.recompile("p1", "s1")
+    with pytest.raises(ValueError):
+        client.integrations.recompile("p1", "s1", external_ids=["conn:t1"], all_items=True)
