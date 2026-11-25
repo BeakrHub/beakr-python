@@ -97,6 +97,8 @@ class Files(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         version_of: str | None = None,
+        authored_by: str | None = None,
+        authored_at: str | None = None,
     ) -> Any:
         """Upload one file; indexing starts on its own.
 
@@ -119,6 +121,13 @@ class Files(Resource[M]):
         or ``unchanged``). ``written_by_agent=True`` marks the upload as an
         agent's work. ``version_of`` (a file id in the same project) adds the
         upload as a new version of that file, whatever its name.
+
+        ``authored_by`` and ``authored_at`` record who wrote the file and when,
+        apart from who uploads it: a name, ``Name <email>`` or an email (matched
+        to an organization member by email, then by exact display name), and a
+        date (``YYYY-MM-DD``) or an ISO 8601 date-time, not in the future. Its
+        compile attributes what the file states to the author and dates its rows
+        by ``authored_at`` when the text states no date of its own.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -136,6 +145,8 @@ class Files(Resource[M]):
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
                 version_of=version_of,
+                authored_by=authored_by,
+                authored_at=authored_at,
             )
         )
 
@@ -151,11 +162,13 @@ class Files(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         version_of: str | None = None,
+        authored_by: str | None = None,
+        authored_at: str | None = None,
     ) -> Any:
         """Finish an interrupted resumable upload, sending only the parts S3 lacks.
 
-        ``relative_path``, ``on_existing``, ``written_by_agent`` and ``version_of``
-        are sent as in :meth:`upload`.
+        ``relative_path``, ``on_existing``, ``written_by_agent``, ``version_of``,
+        ``authored_by`` and ``authored_at`` are sent as in :meth:`upload`.
         """
         file_path = Path(path)
         if not file_path.is_file():
@@ -174,6 +187,8 @@ class Files(Resource[M]):
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
                 version_of=version_of,
+                authored_by=authored_by,
+                authored_at=authored_at,
             )
         )
 
@@ -190,6 +205,9 @@ class Files(Resource[M]):
         poll: float = 5.0,
         on_existing: Literal["version", "new"] = "version",
         written_by_agent: bool | None = None,
+        authored_by: str | None = None,
+        authored_at: str | None = None,
+        authored: Mapping[str | Path, Mapping[str, str | None]] | None = None,
     ) -> Any:
         """Upload several files, or whole directories, as one batch (``/v1/bulk``).
 
@@ -209,6 +227,10 @@ class Files(Resource[M]):
         that file out: it is in ``failed`` with ``error_code``
         (``ambiguous_path``, ``file_not_writable``). ``written_by_agent=True``
         marks the files as an agent's work, not a person's.
+
+        ``authored_by`` and ``authored_at`` (as in :meth:`upload`) apply to every
+        file; ``authored`` maps a file's local path to its own
+        ``{"authored_by": ..., "authored_at": ...}``, which wins over them.
 
         Indexing runs as one job. ``wait=True`` (or ``"index"``) waits for it and
         adds its final state as ``job``, and the upload's outcome as ``status``.
@@ -234,6 +256,16 @@ class Files(Resource[M]):
             raise ValueError("wait='knowledge' needs ingest=True; these stay out of Knowledge")
         entries = batch_entries(paths, include_hidden=include_hidden)
         relative_paths = batch_relative_paths(paths, include_hidden=include_hidden)
+        by_file = {Path(key).resolve(): dict(value) for key, value in (authored or {}).items()}
+        authored_by_name: dict[str, dict[str, str | None]] = {}
+        for file_path, name in entries:
+            own = by_file.get(file_path.resolve(), {})
+            fields = {
+                "authored_by": own.get("authored_by", authored_by),
+                "authored_at": own.get("authored_at", authored_at),
+            }
+            if any(value is not None for value in fields.values()):
+                authored_by_name[name] = fields
 
         def flow() -> Flow:
             completed = yield from upload_many_flow(
@@ -244,6 +276,7 @@ class Files(Resource[M]):
                 relative_paths=relative_paths,
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
+                authored=authored_by_name,
             )
             if not wait:
                 return completed
@@ -309,6 +342,8 @@ class Files(Resource[M]):
         root_folder: bool = True,
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
+        authored_by: str | None = None,
+        authored_at: str | None = None,
     ) -> Any:
         """Upload a directory tree; subdirectories become folders unless ``mirror_folders``
         is False.
@@ -322,7 +357,8 @@ class Files(Resource[M]):
         trees with shared subfolder names, or the same tree again, does not fail.
         Uploading the same tree again adds a version to each file already there
         (``on_existing="version"``, the server's default); ``"new"`` creates
-        second copies. ``written_by_agent`` marks every upload as an agent's.
+        second copies. ``written_by_agent`` marks every upload as an agent's;
+        ``authored_by`` and ``authored_at`` (as in :meth:`upload`) go on every file.
         """
         root = Path(path)
         if not root.is_dir():
@@ -338,6 +374,8 @@ class Files(Resource[M]):
                 root_folder=root_folder,
                 on_existing=on_existing,
                 written_by_agent=written_by_agent,
+                authored_by=authored_by,
+                authored_at=authored_at,
             )
         )
 
@@ -566,9 +604,22 @@ class Files(Resource[M]):
         title: str | None = None,
         description: str | None = None,
         artifact_type: str | None = None,
+        authored_by: str | None = None,
+        authored_at: str | None = None,
     ) -> Any:
+        """Change a file's title, description, type, author or date; None leaves one as it is.
+
+        ``authored_by`` and ``authored_at`` are as in :meth:`upload`; ``""``
+        clears one.
+        """
         body = clean_body(
-            {"title": title, "description": description, "artifact_type": artifact_type}
+            {
+                "title": title,
+                "description": description,
+                "artifact_type": artifact_type,
+                "authored_by": authored_by,
+                "authored_at": authored_at,
+            }
         )
         return self._run(ops.build_files_update_artifact(artifact_id, body=body))
 

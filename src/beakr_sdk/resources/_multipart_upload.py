@@ -73,6 +73,8 @@ def multipart_upload_flow(
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
     version_of: str | None = None,
+    authored_by: str | None = None,
+    authored_at: str | None = None,
 ) -> Flow:
     """Upload (or, with ``upload_id``, resume) one large file.
 
@@ -81,6 +83,8 @@ def multipart_upload_flow(
     folder it was uploaded from) is sent on ``complete``, which records it.
     ``on_existing`` (``"version"``, the server's default, or ``"new"``) and
     ``written_by_agent`` are sent on ``complete`` as given; None leaves them out.
+    So are ``authored_by`` (who wrote the file: a name, ``Name <email>`` or an
+    email) and ``authored_at`` (when: a date or an ISO 8601 date-time).
     ``version_of`` (a file id) is sent as ``artifact_id``: the upload becomes a
     new version of that file.
 
@@ -148,6 +152,8 @@ def multipart_upload_flow(
                     "on_existing": on_existing,
                     "written_by_agent": written_by_agent,
                     "artifact_id": version_of,
+                    "authored_by": authored_by,
+                    "authored_at": authored_at,
                 }
             ),
         )

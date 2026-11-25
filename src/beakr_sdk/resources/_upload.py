@@ -77,6 +77,8 @@ def upload_flow(
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
     version_of: str | None = None,
+    authored_by: str | None = None,
+    authored_at: str | None = None,
 ) -> Flow:
     """Upload one file; returns ``{"artifact", "upload", "folders", "job_id", "status_url", ...}``.
 
@@ -105,6 +107,8 @@ def upload_flow(
             on_existing=on_existing,
             written_by_agent=written_by_agent,
             version_of=version_of,
+            authored_by=authored_by,
+            authored_at=authored_at,
         )
     )
 
@@ -172,6 +176,8 @@ def upload_folder_flow(
     root_folder: bool = True,
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
+    authored_by: str | None = None,
+    authored_at: str | None = None,
 ) -> Flow:
     """Upload every file under ``root``; with ``mirror_folders``, recreate subdirectories.
 
@@ -205,6 +211,8 @@ def upload_folder_flow(
             relative_path=upload_relative_path(file_path, root),
             on_existing=on_existing,
             written_by_agent=written_by_agent,
+            authored_by=authored_by,
+            authored_at=authored_at,
         )
         results.append({"path": str(file_path), **uploaded})
     return results
@@ -330,6 +338,7 @@ def upload_many_flow(
     relative_paths: Mapping[str, str] | None = None,
     on_existing: str | None = "version",
     written_by_agent: bool | None = None,
+    authored: Mapping[str, Mapping[str, str | None]] | None = None,
 ) -> Flow:
     """Upload ``entries`` as one ``/v1/bulk`` batch; returns the batch's completion.
 
@@ -337,7 +346,8 @@ def upload_many_flow(
     file (:func:`batch_relative_paths`); entries it leaves out record none.
     ``on_existing`` (``"version"`` here, as a single upload does; the route's own
     default is ``"new"``) and ``written_by_agent`` are sent on ``complete``; None
-    leaves them out.
+    leaves them out. ``authored`` maps an entry's path in Beakr to its
+    ``authored_by`` and ``authored_at``, sent with that file on ``complete``.
 
     ``prepare`` creates the folders the paths name and a presigned URL per
     file, each file's bytes are PUT there (no Beakr credential), and
@@ -392,6 +402,8 @@ def upload_many_flow(
                     "artifact_type": detect_artifact_type(mime_types[name], file_path.name),
                     "content_hash": hashlib.sha256(data).hexdigest(),
                     "relative_path": (relative_paths or {}).get(name),
+                    "authored_by": (authored or {}).get(name, {}).get("authored_by"),
+                    "authored_at": (authored or {}).get(name, {}).get("authored_at"),
                 }
             )
         )
