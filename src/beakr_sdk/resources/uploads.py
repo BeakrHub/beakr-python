@@ -14,6 +14,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.resources._base import Resource
+from beakr_sdk.resources._multipart_upload import Authors, _authors
 
 
 class Uploads(Resource[M]):
@@ -67,7 +68,7 @@ class Uploads(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         artifact_id: str | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
     ) -> Any:
         """Assemble the parts and create the file. Omit ``parts`` to use every part S3 holds.
@@ -87,7 +88,7 @@ class Uploads(Resource[M]):
                 "on_existing": on_existing,
                 "written_by_agent": written_by_agent,
                 "artifact_id": artifact_id,
-                "authored_by": authored_by,
+                "authored_by": _authors(authored_by),
                 "authored_at": authored_at,
             }
         )
