@@ -358,6 +358,10 @@ MAPPING: list[tuple[str, Callable[[Beakr], Any]]] = [
         lambda c: c.integrations.list_for_project("p1"),
     ),
     (
+        "GET /v1/projects/{}/sources/{}/history-import/status",
+        lambda c: c.integrations.history_import_status("p1", "s1"),
+    ),
+    (
         "GET /v1/projects/{}/sources/{}/tracked-items",
         lambda c: c.integrations.tracked_items("p1", "s1", state="skipped"),
     ),
