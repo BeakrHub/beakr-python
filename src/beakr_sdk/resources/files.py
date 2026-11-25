@@ -24,7 +24,7 @@ from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.resources._base import Resource
 from beakr_sdk.resources._destination import contained, file_name, names_directory
-from beakr_sdk.resources._multipart_upload import multipart_upload_flow
+from beakr_sdk.resources._multipart_upload import Authors, _authors, multipart_upload_flow
 from beakr_sdk.resources._upload import (
     batch_entries,
     batch_relative_paths,
@@ -97,7 +97,7 @@ class Files(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         version_of: str | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
     ) -> Any:
         """Upload one file; indexing starts on its own.
@@ -123,9 +123,12 @@ class Files(Resource[M]):
         upload as a new version of that file, whatever its name.
 
         ``authored_by`` and ``authored_at`` record who wrote the file and when,
-        apart from who uploads it: a name, ``Name <email>`` or an email (matched
-        to an organization member by email, then by exact display name), and a
-        date (``YYYY-MM-DD``) or an ISO 8601 date-time, not in the future. Its
+        apart from who uploads it: a name, ``Name <email>`` or an email, or a list
+        of up to 20 for a co-written file (each matched to an organization member
+        by email, then by exact display name), and a date (``YYYY-MM-DD``) or an
+        ISO 8601 date-time, not in the future. The file answers ``authors``
+        (``[{name, user_id, email}]``) and ``authored_by`` as one display line
+        ("Jane Doe and Bob Smith"). Its
         compile attributes what the file states to the author and dates its rows
         by ``authored_at`` when the text states no date of its own.
         """
@@ -162,7 +165,7 @@ class Files(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         version_of: str | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
     ) -> Any:
         """Finish an interrupted resumable upload, sending only the parts S3 lacks.
@@ -205,9 +208,9 @@ class Files(Resource[M]):
         poll: float = 5.0,
         on_existing: Literal["version", "new"] = "version",
         written_by_agent: bool | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
-        authored: Mapping[str | Path, Mapping[str, str | None]] | None = None,
+        authored: Mapping[str | Path, Mapping[str, Any]] | None = None,
     ) -> Any:
         """Upload several files, or whole directories, as one batch (``/v1/bulk``).
 
@@ -257,7 +260,7 @@ class Files(Resource[M]):
         entries = batch_entries(paths, include_hidden=include_hidden)
         relative_paths = batch_relative_paths(paths, include_hidden=include_hidden)
         by_file = {Path(key).resolve(): dict(value) for key, value in (authored or {}).items()}
-        authored_by_name: dict[str, dict[str, str | None]] = {}
+        authored_by_name: dict[str, dict[str, Any]] = {}
         for file_path, name in entries:
             own = by_file.get(file_path.resolve(), {})
             fields = {
@@ -342,7 +345,7 @@ class Files(Resource[M]):
         root_folder: bool = True,
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
     ) -> Any:
         """Upload a directory tree; subdirectories become folders unless ``mirror_folders``
@@ -604,20 +607,20 @@ class Files(Resource[M]):
         title: str | None = None,
         description: str | None = None,
         artifact_type: str | None = None,
-        authored_by: str | None = None,
+        authored_by: Authors | None = None,
         authored_at: str | None = None,
     ) -> Any:
         """Change a file's title, description, type, author or date; None leaves one as it is.
 
-        ``authored_by`` and ``authored_at`` are as in :meth:`upload`; ``""``
-        clears one.
+        ``authored_by`` and ``authored_at`` are as in :meth:`upload`; ``""`` (or
+        ``[]`` for the authors) clears one.
         """
         body = clean_body(
             {
                 "title": title,
                 "description": description,
                 "artifact_type": artifact_type,
-                "authored_by": authored_by,
+                "authored_by": _authors(authored_by),
                 "authored_at": authored_at,
             }
         )

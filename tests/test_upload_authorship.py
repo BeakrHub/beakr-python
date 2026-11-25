@@ -25,11 +25,13 @@ JANE = "Jane Doe <jane@example.com>"
 def test_upload_and_resume_send_them_on_complete(big_file) -> None:  # noqa: F811
     routes = _routes()
     with Beakr(api_key="bk_live_test", base_url=API) as client:
-        client.files.upload(big_file, project_id="p1", authored_by=JANE, authored_at="2026-06-14")
+        client.files.upload(
+            big_file, project_id="p1", authored_by=[JANE, "Bob Smith"], authored_at="2026-06-14"
+        )
         client.files.resume_upload("u1", big_file, authored_at="2026-06-14T09:30:00Z")
         client.files.uploads.complete("u1", authored_by="")
     first, resumed, low_level = (json.loads(c.request.content) for c in routes["complete"].calls)
-    assert (first["authored_by"], first["authored_at"]) == (JANE, "2026-06-14")
+    assert (first["authored_by"], first["authored_at"]) == ([JANE, "Bob Smith"], "2026-06-14")
     assert resumed["authored_at"] == "2026-06-14T09:30:00Z" and "authored_by" not in resumed
     assert low_level == {"authored_by": ""}
     created = json.loads(routes["create"].calls[0].request.content)
@@ -48,14 +50,17 @@ def test_a_batch_sends_each_files_own_author_over_the_default(tmp_path) -> None:
             project_id="p1",
             authored_by=JANE,
             authored={
-                tmp_path / "b.md": {"authored_by": "Sam Roe", "authored_at": "2026-05-01"},
+                tmp_path / "b.md": {
+                    "authored_by": ("Sam Roe", "Ana Li"),
+                    "authored_at": "2026-05-01",
+                },
                 str(tmp_path / "c.md"): {"authored_at": "2026-04-30"},
             },
         )
     files = json.loads(routes["complete"].calls.last.request.content)["files"]
     assert [(f["path"], f.get("authored_by"), f.get("authored_at")) for f in files] == [
         ("a.md", JANE, None),
-        ("b.md", "Sam Roe", "2026-05-01"),
+        ("b.md", ["Sam Roe", "Ana Li"], "2026-05-01"),
         ("c.md", JANE, "2026-04-30"),
     ]
 
@@ -76,9 +81,11 @@ def test_update_sets_and_clears_them() -> None:
     with Beakr(api_key="bk_live_test", base_url=API) as client:
         client.files.update("a1", authored_by=JANE, authored_at="2026-06-14")
         client.files.update("a1", authored_at="")
-    first, cleared = (json.loads(c.request.content) for c in route.calls)
+        client.files.update("a1", authored_by=[])
+    first, cleared, no_authors = (json.loads(c.request.content) for c in route.calls)
     assert first == {"authored_by": JANE, "authored_at": "2026-06-14"}
     assert cleared == {"authored_at": ""}
+    assert no_authors == {"authored_by": []}
 
 
 def test_a_source_record_keeps_who_wrote_the_file() -> None:
@@ -87,17 +94,21 @@ def test_a_source_record_keeps_who_wrote_the_file() -> None:
             "source_ref": "file:a1",
             "title": "Assay notes",
             "written_by": {
-                "name": "Jane Doe",
-                "by_agent": False,
-                "org_member": True,
-                "text": "Written by Jane Doe",
-                "user_id": "u-jane",
+                "authors": [
+                    {"name": "Jane Doe", "org_member": True, "user_id": "u-jane"},
+                    {"name": "Bob Smith", "org_member": False},
+                ],
+                "by_agent": True,
+                "text": "an agent for Jane Doe and Bob Smith",
             },
         }
     )
     assert record["written_by"] == {
-        "name": "Jane Doe",
-        "by_agent": False,
-        "org_member": True,
-        "text": "Written by Jane Doe",
+        "authors": [
+            {"name": "Jane Doe", "org_member": True},
+            {"name": "Bob Smith", "org_member": False},
+        ],
+        "by_agent": True,
+        "text": "an agent for Jane Doe and Bob Smith",
     }
+    assert "written_by" not in public_source({"source_ref": "file:a1", "written_by": {}})

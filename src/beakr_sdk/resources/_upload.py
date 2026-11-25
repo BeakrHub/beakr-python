@@ -18,7 +18,7 @@ from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import collect_pages
 from beakr_sdk.errors import ValidationError
-from beakr_sdk.resources._multipart_upload import multipart_upload_flow
+from beakr_sdk.resources._multipart_upload import Authors, _authors, multipart_upload_flow
 
 #: Extensions the web classifies as scientific data (browsers report them as
 #: octet-stream). Mirrors ``SCIENTIFIC_EXTENSIONS`` in beakr-web's
@@ -77,7 +77,7 @@ def upload_flow(
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
     version_of: str | None = None,
-    authored_by: str | None = None,
+    authored_by: Authors | None = None,
     authored_at: str | None = None,
 ) -> Flow:
     """Upload one file; returns ``{"artifact", "upload", "folders", "job_id", "status_url", ...}``.
@@ -176,7 +176,7 @@ def upload_folder_flow(
     root_folder: bool = True,
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
-    authored_by: str | None = None,
+    authored_by: Authors | None = None,
     authored_at: str | None = None,
 ) -> Flow:
     """Upload every file under ``root``; with ``mirror_folders``, recreate subdirectories.
@@ -338,7 +338,7 @@ def upload_many_flow(
     relative_paths: Mapping[str, str] | None = None,
     on_existing: str | None = "version",
     written_by_agent: bool | None = None,
-    authored: Mapping[str, Mapping[str, str | None]] | None = None,
+    authored: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> Flow:
     """Upload ``entries`` as one ``/v1/bulk`` batch; returns the batch's completion.
 
@@ -402,7 +402,7 @@ def upload_many_flow(
                     "artifact_type": detect_artifact_type(mime_types[name], file_path.name),
                     "content_hash": hashlib.sha256(data).hexdigest(),
                     "relative_path": (relative_paths or {}).get(name),
-                    "authored_by": (authored or {}).get(name, {}).get("authored_by"),
+                    "authored_by": _authors((authored or {}).get(name, {}).get("authored_by")),
                     "authored_at": (authored or {}).get(name, {}).get("authored_at"),
                 }
             )
