@@ -31,6 +31,7 @@ wherever the source came from::
                     "excerpt_kind"}],      # compact reads
       "cited_passages": 3,                   # compact reads: passages of it the page cites
       "filed_by": {"user_name", "agent", "client", "run", "session", "text"},
+      "written_by": {"name", "by_agent", "org_member", "text"},  # a file's recorded author
       "retrieval": {"tool": "granola_get_note", "arguments": {"note_id": "not_..."}},
     }
 
@@ -62,7 +63,10 @@ from before the field sends neither, and the record then leaves it out.
 
 ``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
 ``user_note`` citation, by name only: never the person's ``user_id``, which the
-page sources route keeps in ``meta.filed_by``.
+page sources route keeps in ``meta.filed_by``. ``written_by`` names who wrote a
+file that records its author (``authored_by`` on the upload): ``name``,
+``by_agent`` (an agent wrote it for that person), ``org_member`` and a ``text``
+line.
 
 Empty fields are left out. Backend row fields (internal unit, connector or
 version ids, hashes) are never forwarded.
@@ -88,6 +92,9 @@ PASSAGE_EXCERPT_KINDS = frozenset({"description", "person"})
 #: The fields of ``filed_by`` a public record keeps, as the engine's
 #: ``citation_filer.PUBLIC_FILER_FIELDS`` plus its ``text`` line: names, never ids.
 PUBLIC_FILER_FIELDS = ("user_name", "agent", "client", "run", "session", "text")
+
+#: The fields of ``written_by`` (``SourceWrittenBy``) a public record keeps.
+WRITTEN_BY_FIELDS = ("name", "by_agent", "org_member", "text")
 
 
 def public_source(source: dict[str, Any], *, citation_key: str | None = None) -> dict[str, Any]:
@@ -209,6 +216,18 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         }
         if public_filed:
             item["filed_by"] = public_filed
+    # Who wrote a file that records its author; a page sources row carries it in ``meta``.
+    written_by = first("written_by")
+    if isinstance(written_by, dict):
+        public_written = {
+            field: written_by[field]
+            if isinstance(written_by[field], bool)
+            else str(written_by[field])
+            for field in WRITTEN_BY_FIELDS
+            if written_by.get(field) not in (None, "")
+        }
+        if public_written:
+            item["written_by"] = public_written
     return {key: value for key, value in item.items() if value not in (None, "")}
 
 
