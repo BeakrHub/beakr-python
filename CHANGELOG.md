@@ -10,18 +10,20 @@ Each release lists the public API changes it supports, taken from the API change
 - A file can record who wrote it and when, apart from who uploaded it.
   `POST /v1/uploads/{upload_id}/complete`, each `files[]` item of
   `POST /v1/bulk/complete` and `PATCH /v1/artifacts/{artifact_id}` take
-  `authored_by` (a name, `Name <email>` or an email) and `authored_at` (a date
-  or an ISO 8601 date-time, not in the future); on the update, `""` clears
-  one. `ArtifactOut` and `CreatedArtifactOut` return `authored_by`,
-  `authored_by_user_id` (the org member it matched, by email or exact display
-  name) and `authored_at` (the date as given, or a UTC time). A file versioned
-  without them keeps its own. Its
-  compile attributes what the file states to the author rather than the
-  uploader, links the author's person card when they are a member with one,
+  `authored_by`, one author or a list of up to 20 for a co-written file (each
+  a name, `Name <email>` or an email), and `authored_at` (a date or an ISO 8601
+  date-time, not in the future); `[]` or `""` clears one. `ArtifactOut` and
+  `CreatedArtifactOut` return `authors` (each `name`, `user_id`, the org member
+  it matched by email or exact display name, and `email`), `authored_by` (the
+  authors as one line, "Jane Doe and Bob Smith") and `authored_at` (the date
+  as given, or a UTC time); `authored_by_user_id` is deprecated and names the
+  first author's member. A file versioned without them keeps its own. Its
+  compile attributes what the file states to its authors rather than the
+  uploader, links each author's person card when they are a member with one,
   and dates its rows by `authored_at` when the text states no date of its own;
-  with `written_by_agent`, an agent wrote it for that person. Each citation of
-  such a file carries `written_by` on its source record (`SourceWrittenBy`:
-  `name`, `by_agent`, `org_member`, `text`).
+  with `written_by_agent`, an agent wrote it for them. Each citation of such a
+  file carries `written_by` on its source record (`SourceWrittenBy`: `authors`,
+  each `name` and `org_member`; `by_agent`; `text`).
 - New: `POST /v1/projects/{project_id}/sources/{attachment_id}/recompile`
   (`uploads:write` or `integrations:admin`) sends a source's tracked items to
   Knowledge again, in any state: the items named in `external_ids` (their
@@ -606,9 +608,10 @@ Each release lists the public API changes it supports, taken from the API change
 ### Client changes
 
 - `files.upload`, `resume_upload`, `uploads.complete`, `upload_folder`, `upload_many`
-  and `files.update` take `authored_by` and `authored_at` (who wrote a file and
-  when; `upload_many` also takes a per-file `authored` map), and `public_source`
-  keeps a record's `written_by`.
+  and `files.update` take `authored_by` (one author or a list of up to 20) and
+  `authored_at` (who wrote a file and when; `upload_many` also takes a per-file
+  `authored` map), and `public_source` keeps a record's `written_by` (`authors`,
+  each `name` and `org_member`; `by_agent`; `text`).
 - `integrations.recompile(project_id, attachment_id, external_ids=[...] | all_items=True,
   mode="retry" | "full", dry_run=...)` sends a source's tracked items to
   Knowledge again, in any state.
