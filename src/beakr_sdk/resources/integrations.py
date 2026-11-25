@@ -92,7 +92,7 @@ class Integrations(Resource[M]):
         project_id: str,
         attachment_id: str,
         *,
-        state: Literal["pending", "ingested", "skipped", "removed"] | None = None,
+        state: Literal["pending", "ingested", "skipped", "failed", "removed"] | None = None,
         reason_code: str | None = None,
         search: str | None = None,
         since: str | None = None,
@@ -103,13 +103,16 @@ class Integrations(Resource[M]):
 
         Answers ``{data, next_cursor, has_more, provider, kind, counts, matched}``.
         Each item's ``state`` is ``pending`` (not read into Knowledge yet),
-        ``ingested``, ``skipped`` or ``removed``; a skipped item gives
-        ``reason_code`` and ``reason``, including when Knowledge read it and found
-        nothing to add (``nothing_to_add``). ``counts`` cover the whole source;
-        ``state``, ``reason_code``, ``search`` (title text) and ``since`` (synced
-        at or after an ISO 8601 time) narrow the page, and ``matched`` says how
-        many they keep. A sync's ``jobs.get(job_id)["result"]["outcomes"]`` links
-        here (``tracked_items_path``) narrowed to that sync.
+        ``ingested``, ``skipped``, ``failed`` (its compile did not finish) or
+        ``removed``; a skipped or failed item gives ``reason_code`` and
+        ``reason``, including when Knowledge read it and found nothing to add
+        (``nothing_to_add``) and why a compile failed (``compile_failed``,
+        ``compile_partial``, ``compile_not_converging``, ``import_gave_up``).
+        ``counts`` cover the whole source; ``state``, ``reason_code``, ``search``
+        (title text) and ``since`` (synced at or after an ISO 8601 time) narrow
+        the page, and ``matched`` says how many they keep. A sync's
+        ``jobs.get(job_id)["result"]["outcomes"]`` links here
+        (``tracked_items_path``) narrowed to that sync.
         """
         return self._run(
             ops.build_integrations_list_tracked_items(
@@ -124,13 +127,31 @@ class Integrations(Resource[M]):
             )
         )
 
+    @returns(ops.build_integrations_get_history_import_status)
+    def history_import_status(self, project_id: str, attachment_id: str) -> Any:
+        """Whether a source takes a history import, whether one runs, and how it ended.
+
+        Answers ``{provider, supported, status, request, progress, outcome,
+        last_import, last_import_cancelled, last_outcome}``. ``status`` is
+        ``idle``, ``pending``, ``running`` or ``cancelling``. ``outcome`` (the
+        running import) and ``last_outcome`` (the last one) count its items
+        ``in_knowledge``, ``skipped``, ``failed`` and ``left``, with
+        ``skipped_reasons``, ``failed_reasons`` and ``left_reasons``, ``removed``
+        for items deleted in the source, ``state`` (``working`` or ``finished``),
+        ``finished_at``, ``followup`` and a ``summary`` sentence. Scope
+        ``projects:read``; a key limited to projects may call it for one of them.
+        """
+        return self._run(
+            ops.build_integrations_get_history_import_status(project_id, attachment_id)
+        )
+
     @iterates(ops.build_integrations_list_tracked_items)
     def iter_tracked_items(
         self,
         project_id: str,
         attachment_id: str,
         *,
-        state: Literal["pending", "ingested", "skipped", "removed"] | None = None,
+        state: Literal["pending", "ingested", "skipped", "failed", "removed"] | None = None,
         reason_code: str | None = None,
         search: str | None = None,
         since: str | None = None,

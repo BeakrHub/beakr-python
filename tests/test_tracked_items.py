@@ -89,3 +89,59 @@ async def test_async_page(async_client) -> None:
     respx.get(TRACKED).respond(200, json=_page([LUNCH]))
     page = await async_client.integrations.tracked_items("p1", "s1", state="skipped")
     assert page["data"] == [LUNCH]
+
+
+FAILED = {
+    **LUNCH,
+    "external_id": "conn:t3",
+    "title": "Assay plan",
+    "state": "failed",
+    "reason_code": "compile_failed",
+    "reason": "The compile did not finish; the next sync sends it again.",
+}
+
+
+@respx.mock
+def test_failed_items_are_filtered_by_their_state(client) -> None:
+    route = respx.get(TRACKED).respond(200, json=_page([FAILED]))
+    page = client.integrations.tracked_items("p1", "s1", state="failed")
+    assert page["data"][0]["reason_code"] == "compile_failed"
+    assert dict(route.calls.last.request.url.params) == {"state": "failed"}
+
+
+HISTORY = f"{BASE}/v1/projects/p1/sources/s1/history-import/status"
+ENDED = {
+    "provider": "gdrive:nango",
+    "supported": True,
+    "status": "idle",
+    "request": None,
+    "progress": None,
+    "outcome": None,
+    "last_import": {"finished_at": "2026-11-24T03:00:00Z"},
+    "last_import_cancelled": False,
+    "last_outcome": {
+        "in_knowledge": 492,
+        "skipped": 93,
+        "failed": 26,
+        "left": 0,
+        "state": "finished",
+        "summary": (
+            "Import finished on 24 Nov 2026: 492 in Knowledge, 93 skipped, 26 failed, 0 left"
+        ),
+    },
+}
+
+
+@respx.mock
+def test_history_import_status_says_how_the_last_import_ended(client) -> None:
+    respx.get(HISTORY).respond(200, json=ENDED)
+    status = client.integrations.history_import_status("p1", "s1")
+    assert status["last_outcome"]["failed"] == 26
+    assert status["last_outcome"]["summary"].startswith("Import finished on 24 Nov 2026")
+
+
+@respx.mock
+async def test_history_import_status_on_the_async_client(async_client) -> None:
+    respx.get(HISTORY).respond(200, json=ENDED)
+    status = await async_client.integrations.history_import_status("p1", "s1")
+    assert status["status"] == "idle"
