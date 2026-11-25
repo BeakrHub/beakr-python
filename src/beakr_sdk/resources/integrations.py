@@ -23,7 +23,7 @@ Example::
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal
 
 from beakr_sdk._generated import operations as ops
@@ -125,6 +125,45 @@ class Integrations(Resource[M]):
                 cursor=cursor,
                 limit=limit,
             )
+        )
+
+    @returns(ops.build_integrations_recompile_project_source)
+    def recompile(
+        self,
+        project_id: str,
+        attachment_id: str,
+        *,
+        external_ids: Sequence[str] | None = None,
+        all_items: bool = False,
+        mode: Literal["retry", "full"] = "retry",
+        dry_run: bool = False,
+    ) -> Any:
+        """Send a source's tracked items to Knowledge again, in any state.
+
+        Name the items by their tracked-items ``external_id`` (``external_ids``),
+        or pass ``all_items=True`` for every item the source tracks (up to 500 per
+        request; ``over_cap`` counts the rest). ``mode="retry"`` sends again only
+        items not in Knowledge at their current version (pending, failed,
+        skipped); ``mode="full"`` also sends items already in Knowledge and has
+        each whole document read again, for example after the source's guidance
+        changed. A sync starts at once through the attaching person's connection
+        (``sync`` is ``started`` with its ``sync_job_id``, or
+        ``waiting_for_running_sync``). ``dry_run=True`` counts and sends nothing.
+
+        Anyone who can edit the project may. One request per source every ten
+        minutes: a sooner one raises ``RateLimitError`` (``recompile_cooldown``).
+        ``ConflictError`` (``connection_unusable``, ``knowledge_off``) when the
+        source cannot be read or Knowledge is off for it.
+        """
+        if (external_ids is None) == (not all_items):
+            raise ValueError("pass external_ids or all_items=True, not both or neither")
+        body: dict[str, Any] = {"mode": mode, "dry_run": dry_run}
+        if all_items:
+            body["all"] = True
+        else:
+            body["external_ids"] = list(external_ids or [])
+        return self._run(
+            ops.build_integrations_recompile_project_source(project_id, attachment_id, body=body)
         )
 
     @returns(ops.build_integrations_get_history_import_status)
