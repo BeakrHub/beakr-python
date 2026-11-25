@@ -147,13 +147,16 @@ class Integrations(Resource[M]):
         skipped); ``mode="full"`` also sends items already in Knowledge and has
         each whole document read again, for example after the source's guidance
         changed. A sync starts at once through the attaching person's connection
-        (``sync`` is ``started`` with its ``sync_job_id``, or
-        ``waiting_for_running_sync``). ``dry_run=True`` counts and sends nothing.
+        (``sync`` is ``started`` with its ``sync_job_id``). ``dry_run=True`` counts
+        and sends nothing. Pending items still on their way into Knowledge (their
+        compile queued or running, or read in the last 30 minutes) are left out and
+        counted in ``in_progress_left``.
 
         Anyone who can edit the project may. One request per source every ten
         minutes: a sooner one raises ``RateLimitError`` (``recompile_cooldown``).
-        ``ConflictError`` (``connection_unusable``, ``knowledge_off``) when the
-        source cannot be read or Knowledge is off for it.
+        ``ConflictError`` (``connection_unusable``, ``knowledge_off``,
+        ``sync_running``) when the source cannot be read, Knowledge is off for it,
+        or a sync of it is running (what it reads is already on its way).
         """
         if (external_ids is None) == (not all_items):
             raise ValueError("pass external_ids or all_items=True, not both or neither")
