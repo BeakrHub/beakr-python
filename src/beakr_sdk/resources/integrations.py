@@ -111,7 +111,9 @@ class Integrations(Resource[M]):
         skipped, failed or partial item gives ``reason_code`` and ``reason``,
         including when Knowledge read it and found nothing to add
         (``nothing_to_add``) and why a compile failed (``compile_failed``,
-        ``import_gave_up``).
+        ``import_gave_up``, ``retry_gave_up``). A pending item, and a partial one
+        Beakr retries, says why it waits (``pending_reason``, with a sentence in
+        ``pending_reason_text``) and when Beakr tries next (``next_attempt_at``).
         ``counts`` cover the whole source; ``state``, ``reason_code``, ``search``
         (title text) and ``since`` (synced at or after an ISO 8601 time) narrow
         the page, and ``matched`` says how many they keep. A sync's
