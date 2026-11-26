@@ -31,6 +31,7 @@ wherever the source came from::
                     "excerpt_kind"}],      # compact reads
       "cited_passages": 3,                   # compact reads: passages of it the page cites
       "filed_by": {"user_name", "agent", "client", "run", "session", "text"},
+      "written_by": {"authors": [{"name", "org_member"}], "by_agent", "text"},  # recorded authors
       "retrieval": {"tool": "granola_get_note", "arguments": {"note_id": "not_..."}},
     }
 
@@ -62,7 +63,10 @@ from before the field sends neither, and the record then leaves it out.
 
 ``filed_by`` names who wrote an inline ``conversation``, ``agent_note`` or
 ``user_note`` citation, by name only: never the person's ``user_id``, which the
-page sources route keeps in ``meta.filed_by``.
+page sources route keeps in ``meta.filed_by``. ``written_by`` names who wrote a
+file that records its authors (``authored_by`` on the upload): ``authors`` (each
+``name`` and ``org_member``), ``by_agent`` (an agent wrote it for them) and a
+``text`` line ("Jane Doe and Bob Smith").
 
 Empty fields are left out. Backend row fields (internal unit, connector or
 version ids, hashes) are never forwarded.
@@ -88,6 +92,35 @@ PASSAGE_EXCERPT_KINDS = frozenset({"description", "person"})
 #: The fields of ``filed_by`` a public record keeps, as the engine's
 #: ``citation_filer.PUBLIC_FILER_FIELDS`` plus its ``text`` line: names, never ids.
 PUBLIC_FILER_FIELDS = ("user_name", "agent", "client", "run", "session", "text")
+
+#: The fields of each ``written_by.authors`` entry a public record keeps.
+WRITTEN_BY_AUTHOR_FIELDS = ("name", "org_member")
+
+
+def _public_written_by(value: Any) -> dict[str, Any] | None:
+    """``written_by`` (``SourceWrittenBy``) as ``{authors, by_agent, text}``, or None.
+
+    Each author keeps its ``name`` and ``org_member`` only, never a member id.
+    """
+    if not isinstance(value, dict):
+        return None
+    authors = [
+        {
+            field: author[field] if field == "org_member" else str(author[field])
+            for field in WRITTEN_BY_AUTHOR_FIELDS
+            if author.get(field) not in (None, "")
+        }
+        for author in value.get("authors") or []
+        if isinstance(author, dict) and author.get("name")
+    ]
+    public: dict[str, Any] = {}
+    if authors:
+        public["authors"] = authors
+    if isinstance(value.get("by_agent"), bool):
+        public["by_agent"] = value["by_agent"]
+    if value.get("text"):
+        public["text"] = str(value["text"])
+    return public if authors or public.get("text") else None
 
 
 def public_source(source: dict[str, Any], *, citation_key: str | None = None) -> dict[str, Any]:
@@ -209,6 +242,10 @@ def public_source(source: dict[str, Any], *, citation_key: str | None = None) ->
         }
         if public_filed:
             item["filed_by"] = public_filed
+    # Who wrote a file that records its authors; a page sources row carries it in ``meta``.
+    written_by = _public_written_by(first("written_by"))
+    if written_by:
+        item["written_by"] = written_by
     return {key: value for key, value in item.items() if value not in (None, "")}
 
 

@@ -14,6 +14,7 @@ from beakr_sdk._generated import operations as ops
 from beakr_sdk._resource import M
 from beakr_sdk._typing import returns
 from beakr_sdk.resources._base import Resource
+from beakr_sdk.resources._multipart_upload import Authors, _authors
 
 
 class Uploads(Resource[M]):
@@ -67,13 +68,16 @@ class Uploads(Resource[M]):
         on_existing: Literal["version", "new"] | None = None,
         written_by_agent: bool | None = None,
         artifact_id: str | None = None,
+        authored_by: Authors | None = None,
+        authored_at: str | None = None,
     ) -> Any:
         """Assemble the parts and create the file. Omit ``parts`` to use every part S3 holds.
 
         ``on_existing`` (``"version"`` by default on the server) adds the upload as a
         version of the file already at its path; ``"new"`` creates a separate file.
         ``written_by_agent`` marks the upload as an agent's work. ``artifact_id``
-        adds the upload as a new version of that file instead.
+        adds the upload as a new version of that file instead. ``authored_by`` and
+        ``authored_at`` record who wrote the file and when (``files.upload``).
         """
         body = clean_body(
             {
@@ -84,6 +88,8 @@ class Uploads(Resource[M]):
                 "on_existing": on_existing,
                 "written_by_agent": written_by_agent,
                 "artifact_id": artifact_id,
+                "authored_by": _authors(authored_by),
+                "authored_at": authored_at,
             }
         )
         return self._run(ops.build_uploads_complete_upload(upload_id, body=body))

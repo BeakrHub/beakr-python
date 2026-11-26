@@ -16,8 +16,9 @@ Only one part is held in memory at a time. If the process dies, the upload id
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeAlias
 
 from beakr_sdk._calls import Call, Flow, clean_body
 from beakr_sdk._generated import operations as ops
@@ -57,6 +58,20 @@ def _read_part(path: Path, part_number: int, part_size: int) -> bytes:
         return handle.read(part_size)
 
 
+#: Who wrote a file (``authored_by``): one name, ``Name <email>`` or email, or a
+#: list of up to 20 of them for a co-written file. ``""`` or ``[]`` clears it on
+#: an update; each entry is matched to an organization member by email, then by
+#: exact display name, and kept as text otherwise.
+Authors: TypeAlias = "str | Sequence[str]"
+
+
+def _authors(value: Authors | None) -> str | list[str] | None:
+    """``authored_by`` as the API takes it: a string as given, any other sequence as a list."""
+    if value is None or isinstance(value, str):
+        return value
+    return [str(entry) for entry in value]
+
+
 def multipart_upload_flow(
     path: Path,
     *,
@@ -73,6 +88,8 @@ def multipart_upload_flow(
     on_existing: str | None = None,
     written_by_agent: bool | None = None,
     version_of: str | None = None,
+    authored_by: Authors | None = None,
+    authored_at: str | None = None,
 ) -> Flow:
     """Upload (or, with ``upload_id``, resume) one large file.
 
@@ -81,6 +98,8 @@ def multipart_upload_flow(
     folder it was uploaded from) is sent on ``complete``, which records it.
     ``on_existing`` (``"version"``, the server's default, or ``"new"``) and
     ``written_by_agent`` are sent on ``complete`` as given; None leaves them out.
+    So are ``authored_by`` (who wrote the file: a name, ``Name <email>`` or an
+    email) and ``authored_at`` (when: a date or an ISO 8601 date-time).
     ``version_of`` (a file id) is sent as ``artifact_id``: the upload becomes a
     new version of that file.
 
@@ -148,6 +167,8 @@ def multipart_upload_flow(
                     "on_existing": on_existing,
                     "written_by_agent": written_by_agent,
                     "artifact_id": version_of,
+                    "authored_by": _authors(authored_by),
+                    "authored_at": authored_at,
                 }
             ),
         )
