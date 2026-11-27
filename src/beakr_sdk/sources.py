@@ -97,13 +97,64 @@ PUBLIC_FILER_FIELDS = ("user_name", "agent", "client", "run", "session", "text")
 WRITTEN_BY_AUTHOR_FIELDS = ("name", "org_member")
 
 
-def _public_written_by(value: Any) -> dict[str, Any] | None:
-    """``written_by`` (``SourceWrittenBy``) as ``{authors, by_agent, text}``, or None.
+def _display_authors(names: list[str]) -> str | None:
+    """``Jane Doe``, ``Jane Doe and Bob Smith``, ``Jane Doe, Bob Smith and Ana Li``.
 
-    Each author keeps its ``name`` and ``org_member`` only, never a member id.
+    The engine's ``api/dto/authorship.display_authors``, so a record built here
+    reads the same line the engine's own source records carry.
     """
+    if not names:
+        return None
+    if len(names) == 1:
+        return names[0]
+    return f"{', '.join(names[:-1])} and {names[-1]}"
+
+
+def _written_by_from_stamp(entries: list[Any]) -> dict[str, Any] | None:
+    """A citation's stored ``written_by`` stamp as ``{authors, by_agent, text}``, or None.
+
+    A page sources row (``GET /v1/knowledge/wiki/pages/{page_id}/sources``) carries
+    the citation's ``written_by`` as the compiler stored it: one ``{name, user_id?,
+    by_agent?}`` entry per author, a list (or, from early dev builds, a single
+    entry). The engine turns that stamp into ``SourceWrittenBy`` with
+    ``compiler/source_authorship.public_written_by``; this is the same mapping. A
+    member is reported as ``org_member`` only, never by id.
+    """
+    stamped = [
+        entry
+        for entry in entries
+        if isinstance(entry, dict) and " ".join(str(entry.get("name") or "").split())
+    ]
+    if not stamped:
+        return None
+    names = [" ".join(str(entry["name"]).split()) for entry in stamped]
+    authors = [
+        {"name": name, "org_member": bool(entry.get("user_id"))}
+        for name, entry in zip(names, stamped)
+    ]
+    by_agent = any(entry.get("by_agent") is True for entry in stamped)
+    line = _display_authors(names)
+    return {
+        "authors": authors,
+        "by_agent": by_agent,
+        "text": f"an agent for {line}" if by_agent else line,
+    }
+
+
+def _public_written_by(value: Any) -> dict[str, Any] | None:
+    """``written_by`` as ``{authors, by_agent, text}`` (``SourceWrittenBy``), or None.
+
+    ``value`` is either the public ``SourceWrittenBy`` a Knowledge read's source
+    record carries, or the stored stamp a page sources row carries (see
+    :func:`_written_by_from_stamp`). Each author keeps its ``name`` and
+    ``org_member`` only, never a member id.
+    """
+    if isinstance(value, list):
+        return _written_by_from_stamp(value)
     if not isinstance(value, dict):
         return None
+    if "authors" not in value and "text" not in value and value.get("name"):
+        return _written_by_from_stamp([value])
     authors = [
         {
             field: author[field] if field == "org_member" else str(author[field])
