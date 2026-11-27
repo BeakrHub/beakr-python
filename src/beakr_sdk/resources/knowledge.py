@@ -82,6 +82,7 @@ def _page_changed(proposal_id: str, expected: int, current: Any) -> ConflictErro
         f"The page changed since revision {expected} (now {current}); nothing was applied. "
         f"Draft the options again with proposals.resolution_options({proposal_id!r}) and "
         "choose again.",
+        status=409,
         code="conflict",
     )
 

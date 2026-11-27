@@ -142,6 +142,9 @@ def test_a_page_that_changed_is_refused_before_anything_is_drafted_or_sent(clien
     with pytest.raises(ConflictError) as caught:
         client.knowledge.proposals.resolve("f1", option_id="A", expected_revision=3)
     assert "changed since revision 3 (now 5)" in caught.value.message
+    # The refusal is a 409 like the server's own stale-revision answer, so a
+    # caller branching on ``status`` (as the TypeScript SDK's callers do) sees it.
+    assert caught.value.status == 409
     assert not routes["drafts"].called
     assert not routes["resolve"].called and not routes["rows"].called
 

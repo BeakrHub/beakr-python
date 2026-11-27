@@ -112,3 +112,76 @@ def test_a_source_record_keeps_who_wrote_the_file() -> None:
         "text": "an agent for Jane Doe and Bob Smith",
     }
     assert "written_by" not in public_source({"source_ref": "file:a1", "written_by": {}})
+
+
+#: A ``GET /v1/knowledge/wiki/pages/{page_id}/sources`` row for a citation of a
+#: co-written upload, as sandbox served it (engine 3a7bbde4fd, 26 Nov 2026),
+#: trimmed. The route carries ``written_by`` as the compiler stored it in the
+#: citation's ``meta``: a list of ``{name, user_id?}`` entries, not the public
+#: ``SourceWrittenBy`` object a Knowledge read's source record carries.
+PAGE_SOURCES_ROW = {
+    "source_ref": "beakr-source:v1:file:b75b5c40-8bc3-4e13-85cc-2f1a99321da0",
+    "key": "artifact:a6799af3-4b0f-49d0-98f8-847aa30d7fa8-u1",
+    "source_type": "artifact",
+    "source_title": "r11-coauthored-note.md",
+    "section_id": "sec_description",
+    "stance": "support",
+    "meta": {
+        "origin": "upload",
+        "file_name": "r11-coauthored-note.md",
+        "artifact_id": "b75b5c40-8bc3-4e13-85cc-2f1a99321da0",
+        "written_by": [{"name": "Dr. Jane Testwell"}, {"name": "Bob Sample"}],
+    },
+    "artifact_id": "b75b5c40-8bc3-4e13-85cc-2f1a99321da0",
+    "excerpt": "Assay R108-T2 was run by two people on 2025-04-02.",
+    "written_by": [{"name": "Dr. Jane Testwell"}, {"name": "Bob Sample"}],
+}
+
+
+def test_a_page_sources_row_keeps_who_wrote_the_file() -> None:
+    # Root cause: public_source read ``written_by`` only as the public
+    # SourceWrittenBy dict, so the stored list a page sources row carries was
+    # dropped and knowledge.pages.sources() never said who wrote a cited file.
+    record = public_source(PAGE_SOURCES_ROW)
+    assert record["written_by"] == {
+        "authors": [
+            {"name": "Dr. Jane Testwell", "org_member": False},
+            {"name": "Bob Sample", "org_member": False},
+        ],
+        "by_agent": False,
+        "text": "Dr. Jane Testwell and Bob Sample",
+    }
+
+
+def test_a_stamp_names_members_and_agents_but_never_an_id() -> None:
+    stamp = [
+        {"name": "Jane  Doe", "user_id": "u-jane", "by_agent": True},
+        {"name": "Bob Smith", "by_agent": True},
+        {"name": "Ana Li", "by_agent": True},
+        {"name": "  "},
+    ]
+    record = public_source({"source_ref": "file:a1", "meta": {"written_by": stamp}})
+    assert record["written_by"] == {
+        "authors": [
+            {"name": "Jane Doe", "org_member": True},
+            {"name": "Bob Smith", "org_member": False},
+            {"name": "Ana Li", "org_member": False},
+        ],
+        "by_agent": True,
+        "text": "an agent for Jane Doe, Bob Smith and Ana Li",
+    }
+    assert "u-jane" not in json.dumps(record)
+    # The one-author dict early dev builds stored, and an empty stamp.
+    single = public_source({"source_ref": "file:a1", "written_by": {"name": "Jane Doe"}})
+    assert single["written_by"]["text"] == "Jane Doe"
+    assert "written_by" not in public_source({"source_ref": "file:a1", "written_by": []})
+
+
+@respx.mock
+def test_pages_sources_says_who_wrote_a_cited_file() -> None:
+    respx.get(f"{API}/v1/knowledge/wiki/pages/pg1/sources").respond(
+        200, json={"data": [PAGE_SOURCES_ROW], "next_cursor": None, "has_more": False}
+    )
+    with Beakr(api_key="bk_live_test", base_url=API) as client:
+        (record,) = client.knowledge.pages.sources("pg1")
+    assert record["written_by"]["text"] == "Dr. Jane Testwell and Bob Sample"
